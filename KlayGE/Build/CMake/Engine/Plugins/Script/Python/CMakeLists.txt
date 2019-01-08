@@ -59,10 +59,18 @@ SET_TARGET_PROPERTIES(${LIB_NAME} PROPERTIES
 
 KLAYGE_ADD_PRECOMPILED_HEADER(${LIB_NAME} "KlayGE/KlayGE.hpp" "${KLAYGE_PROJECT_DIR}/Core/Include" "${KLAYGE_PROJECT_DIR}/Plugins/Src/Script/Python/PythonScriptFactory.cpp")
 
+set(libpython_target_libraries "")
+if(KLAYGE_PLATFORM_WINDOWS)
+	list(APPEND libpython_target_libraries ws2_32) # Required by signalmodule
+	list(APPEND libpython_target_libraries version) # Required by sysmodule
+	list(APPEND libpython_target_libraries shlwapi) # Required by PC/getpathp
+endif()
+
 TARGET_LINK_LIBRARIES(${LIB_NAME}
 	debug KlayGE_Core${KLAYGE_OUTPUT_SUFFIX}${CMAKE_DEBUG_POSTFIX} optimized KlayGE_Core${KLAYGE_OUTPUT_SUFFIX}
 	debug KFL${KLAYGE_OUTPUT_SUFFIX}${CMAKE_DEBUG_POSTFIX} optimized KFL${KLAYGE_OUTPUT_SUFFIX}
 	debug python${KLAYGE_OUTPUT_SUFFIX}${CMAKE_DEBUG_POSTFIX} optimized python${KLAYGE_OUTPUT_SUFFIX}
+	${libpython_target_libraries}
 )
 
 ADD_DEPENDENCIES(AllInEngine ${LIB_NAME})
