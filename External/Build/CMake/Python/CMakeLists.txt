@@ -1,23 +1,20 @@
 SET(PY_VERSION_MAJOR 3)
-SET(PY_VERSION_MINOR 5)
-SET(PY_VERSION_PATCH 1)
+SET(PY_VERSION_MINOR 6)
+SET(PY_VERSION_PATCH 8)
 SET(PY_VERSION "${PY_VERSION_MAJOR}.${PY_VERSION_MINOR}.${PY_VERSION_PATCH}")
 
 SET(PYTHON_PROJECT_DIR "${EXTERNAL_PROJECT_DIR}/Python")
 SET(PYTHON_OUTPUT_DIR "${EXTERNAL_PROJECT_DIR}/lib/Python/${KLAYGE_PLATFORM_NAME}")
-SET(REL_PATH "External/Downloads/Python-${PY_VERSION}.patched.7z")
-SET(PACKAGE_FILE_ID "4EA1271AA716BA0BD70E41D3B8112F3C645283B8")
 
-DOWNLOAD_PACKAGE("Python" ${REL_PATH} ${PACKAGE_FILE_ID})
-
-UpdateExternalLib("python-cmake-buildsystem" "python-cmake-buildsystem" "https://github.com/gongminmin/python-cmake-buildsystem.git" "f6f5b9f5ca63bc72c56aab2740c68df2cb3209e8")
+UpdateExternalLib("Python" "https://github.com/gongminmin/cpython.git" "84e6608b2846f7afce6f73052cfb1834e1544321" "FixForKlayGE" "v${PY_VERSION}")
+UpdateExternalLib("python-cmake-buildsystem" "https://github.com/gongminmin/python-cmake-buildsystem.git" "4063c662a66a6f75e2d8e267757946118c801a19")
 
 SET(SRC_DIR ${PYTHON_PROJECT_DIR})
 
 FOREACH(flag_var
 		CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
 	IF(KLAYGE_COMPILER_MSVC)
-		SET(${flag_var} "${${flag_var}} /wd4273 /we4013 /we4133")
+		SET(${flag_var} "${${flag_var}} /wd4273 /wd4013 /wd4133 /wd4703")
 	ENDIF()
 ENDFOREACH()
 IF(KLAYGE_COMPILER_MSVC)
@@ -91,6 +88,15 @@ set(WITH_COMPUTED_GOTOS OFF CACHE BOOL "" FORCE)
 set(WITH_DOC_STRINGS OFF CACHE BOOL "" FORCE)
 set(WITH_TSC OFF CACHE BOOL "" FORCE)
 
+set(USE_BUILTIN_ZLIB OFF CACHE BOOL "" FORCE)
+set(ZLIB_INCLUDE_DIR
+	${EXTERNAL_PROJECT_DIR}/zlib
+	${KLAYGE_ROOT_DIR}/Build/${KLAYGE_BUILD_FOLDER}/External/zlib/zlib
+)
+set(ZLIB_LIBRARY
+	debug zlib${KLAYGE_OUTPUT_SUFFIX}${CMAKE_DEBUG_POSTFIX} optimized zlib${KLAYGE_OUTPUT_SUFFIX}
+)
+
 IF(KLAYGE_PLATFORM_WINDOWS_STORE)
 	ADD_DEFINITIONS(-D_WIN32_WINNT=0x0602)
 	ADD_DEFINITIONS(-DWINVER=0x0602)
@@ -144,3 +150,5 @@ SET_TARGET_PROPERTIES(libpython-static PROPERTIES
 	OUTPUT_NAME python${KLAYGE_OUTPUT_SUFFIX}
 	FOLDER "${EXTERNAL_VS_FOLDER_PREFIX}/Python"
 )
+
+add_dependencies(libpython-static zlib)
