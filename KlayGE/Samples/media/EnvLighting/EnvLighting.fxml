@@ -190,6 +190,19 @@ float3 ImportanceSampleBP(float2 xi, float shininess)
 	return float3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta);
 }
 
+// https://learnopengl.com/PBR/IBL/Specular-IBL
+float3 ImportanceSampleGGX(float2 xi, float roughness)
+{
+	const float PI = 3.1415926f;
+
+  float a = roughness * roughness;
+  
+  float phi = 2 * PI * xi.x;
+  float cos_theta = sqrt((1.0 - xi.y) / (1.0 + (a*a - 1.0) * xi.y));
+  float sin_theta = sqrt(1 - cos_theta * cos_theta);
+  return float3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta);
+}
+
 float3 ImportanceSampleBP(float2 xi, float shininess, float3 normal)
 {
 	float3 h = ImportanceSampleBP(xi, shininess);
