@@ -207,6 +207,24 @@ float4x4 quat_to_mat4(float4 quat)
 		0,					0,					0,					1);
 }
 
+float3x3 quat_to_mat3(float4 quat)  //from IBLBaker
+{
+  float3 cross = quat.yzx * quat.zxy;
+  float3 square= quat.xyz * quat.xyz;
+  float3 wi = quat.w * quat.xyz;
+
+  square = square.xyz + square.yzx;
+
+  float3 diag = 0.5 - square;
+  float3 a = (cross + wi);
+  float3 b = (cross - wi);
+
+  return float3x3(
+    2.0 * float3(diag.x, b.z, a.y),
+    2.0 * float3(a.z, diag.y, b.x),
+    2.0 * float3(b.y, a.x, diag.z));
+}
+
 float4 bary_centric_quat(float4 q1, float4 q2, float4 q3, float f, float g)
 {
 	float4 ret;

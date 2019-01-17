@@ -144,6 +144,12 @@ uint ReverseBits(uint bits)
 	return bits;
 }
 
+//
+// Attributed to:
+// http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
+// Holger Dammertz.
+// 
+
 float RadicalInverseVdC(uint bits)
 {
 	return ReverseBits(bits) * 2.3283064365386963e-10f; // / 0x100000000

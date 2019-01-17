@@ -187,6 +187,7 @@ SET(RENDERING_EFFECT_FILES
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/Blitter.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/Blur.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/Bone.fxml
+	${KLAYGE_PROJECT_DIR}/media/RenderFX/BRDF.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/CameraProxy.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/CascadedShadow.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/ClusteredDeferredRendering.fxml

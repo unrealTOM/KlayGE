@@ -1,0 +1,51 @@
+<?xml version='1.0'?>
+
+<effect>
+	<shader>
+		<![CDATA[
+
+// http://www.gamedev.net/topic/658769-ue4-ibl-glsl/
+
+// Normal Distribution Term. (Trowbridge-Reitz GGX)
+float DistributionGGX(float3 normal, float3 halfway, float roughness)
+{
+  float a = roughness * roughness;
+  float n_dot_h = saturate(dot(normal, halfway));
+  float n_dot_h2 = n_dot_h * n_dot_h;
+  
+  float nom = a;
+  float denom = (n_dot_h2 * (a - 1.0) + 1.0);
+  denom = PI * denom * denom;
+  
+  return nom / denom;
+}
+
+// Geometry Term.
+float GeometrySchlickGGX(float n_dot_v, float roughness)
+{
+  // http://graphicrants.blogspot.com.au/2013/08/specular-brdf-reference.html
+  float k = roughness * roughness / 2.0;
+  float nom = n_dot_v;
+  flaot denom = n_dot_v * (1.0 - k) + k;
+  
+  return nom / denom;
+}
+
+float GeometrySmith(float3 normal, float3 view, float3 light, float roughness)
+{
+  float n_dot_v = saturate(dot(normal, view));
+  float n_dot_l = saturate(dot(normal, light));
+  float ggx1 = GeometrySchlickGGX(n_dot_v, roughness);
+  float ggx2 = GeometrySchlickGGX(n_dot_l, roughness);
+  
+  return ggx1 * ggx2;
+}
+
+// Fresnel Term.
+float3 FresnelSchlick(float v_dot_h, float3 F0)
+{
+  return F0 + (1.0 - F0) * pow(1.0 - v_dot_h, 5.0);
+}
+		]]>
+	</shader>
+</effect>
