@@ -10,6 +10,8 @@
 			<item name="Prefiltered"/>
 			<item name="Approximate"/>
 			<item name="GroundTruth"/>
+      <item name="Approximate GGX"/>
+      <item name="GroundTruth GGX"/>
 		</control>
 	</dialog>
 	

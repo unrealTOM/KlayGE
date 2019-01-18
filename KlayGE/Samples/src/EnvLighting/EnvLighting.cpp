@@ -57,7 +57,9 @@ namespace
 			techs_[3] = effect_->TechniqueByName("Prefiltered");
 			techs_[4] = effect_->TechniqueByName("Approximate");
 			techs_[5] = effect_->TechniqueByName("GroundTruth");
-			this->RenderingType(0);
+            techs_[6] = effect_->TechniqueByName("ApproximateGGX");
+            techs_[7] = effect_->TechniqueByName("GroundTruthGGX");
+            this->RenderingType(0);
 
 			SceneManager& sm = Context::Instance().SceneManagerInstance();
 			for (uint32_t i = 0; i < sm.NumLights(); ++ i)
@@ -196,7 +198,7 @@ namespace
 		}
 
 	private:
-		array<RenderTechnique*, 6> techs_;
+		array<RenderTechnique*, 8> techs_;
 	};
 
 	float4 const diff_parametes[] =

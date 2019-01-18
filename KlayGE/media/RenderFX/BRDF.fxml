@@ -9,6 +9,8 @@
 // Normal Distribution Term. (Trowbridge-Reitz GGX)
 float DistributionGGX(float3 normal, float3 halfway, float roughness)
 {
+	const float PI = 3.1415926f;
+
   float a = roughness * roughness;
   float n_dot_h = saturate(dot(normal, halfway));
   float n_dot_h2 = n_dot_h * n_dot_h;
@@ -24,9 +26,9 @@ float DistributionGGX(float3 normal, float3 halfway, float roughness)
 float GeometrySchlickGGX(float n_dot_v, float roughness)
 {
   // http://graphicrants.blogspot.com.au/2013/08/specular-brdf-reference.html
-  float k = roughness * roughness / 2.0;
+  float k_ibl = roughness * roughness / 2.0;
   float nom = n_dot_v;
-  flaot denom = n_dot_v * (1.0 - k) + k;
+  float denom = n_dot_v * (1.0 - k_ibl) + k_ibl;
   
   return nom / denom;
 }
@@ -39,6 +41,15 @@ float GeometrySmith(float3 normal, float3 view, float3 light, float roughness)
   float ggx2 = GeometrySchlickGGX(n_dot_l, roughness);
   
   return ggx1 * ggx2;
+}
+
+// Appoximation of joint Smith term for GGX
+// [Heitz 2014, "Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs"]
+float Vis_SmithJointApprox( float a, float n_dot_v, float n_dot_l )
+{
+	float Vis_SmithV = n_dot_l * ( n_dot_v * ( 1 - a ) + a );
+	float Vis_SmithL = n_dot_v * ( n_dot_l * ( 1 - a ) + a );
+	return 0.5 * rcp( Vis_SmithV + Vis_SmithL );
 }
 
 // Fresnel Term.

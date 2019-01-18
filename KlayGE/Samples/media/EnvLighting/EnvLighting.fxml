@@ -4,6 +4,7 @@
 	<include name="Lighting.fxml"/>
 	<include name="util.fxml"/>
 	<include name="Quaternion.fxml"/>
+  <include name="BRDF.fxml"/>
 
 	<cbuffer name="per_object">
 		<parameter type="float3" name="pos_center"/>
@@ -185,7 +186,7 @@ float3 ImportanceSampleBP(float2 xi, float shininess)
 	const float PI = 3.1415926f;
 
 	float phi = 2 * PI * xi.x;
-	float cos_theta = pow(1 - xi.y * (shininess + 1) / (shininess + 2), 1 / (shininess + 1));
+	float cos_theta = pow(abs(1 - xi.y * (shininess + 1) / (shininess + 2)), 1 / (shininess + 1));
 	float sin_theta = sqrt(1 - cos_theta * cos_theta);
 	return float3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta);
 }
@@ -206,6 +207,16 @@ float3 ImportanceSampleGGX(float2 xi, float roughness)
 float3 ImportanceSampleBP(float2 xi, float shininess, float3 normal)
 {
 	float3 h = ImportanceSampleBP(xi, shininess);
+	
+	float3 up_vec = abs(normal.z) < 0.999f ? float3(0, 0, 1) : float3(1, 0, 0);
+	float3 tangent = normalize(cross(up_vec, normal));
+	float3 binormal = cross(normal, tangent);
+	return tangent * h.x + binormal * h.y + normal * h.z;
+}
+
+float3 ImportanceSampleGGX(float2 xi, float roughness, float3 normal)
+{
+	float3 h = ImportanceSampleGGX(xi, roughness);
 	
 	float3 up_vec = abs(normal.z) < 0.999f ? float3(0, 0, 1) : float3(1, 0, 0);
 	float3 tangent = normalize(cross(up_vec, normal));
@@ -258,6 +269,40 @@ float3 SpecularIBL(float3 c_spec, float glossiness, float3 normal, float3 view)
 			float fc = pow(1 - v_dot_h, 5);
 			float3 f = (1 - fc) * c_spec + fc;
 			specular += env_clr * f * g * v_dot_h / max(1e-6f, n_dot_h * n_dot_v);
+		}
+	}
+
+	return specular / NUM_SAMPLES;
+}
+
+float3 SpecularIBLGGX(float3 c_spec, float roughness, float3 normal, float3 view)
+{
+	float3 specular = 0;
+	
+	const uint NUM_SAMPLES = 64;
+	for (uint i = 0; i < NUM_SAMPLES; ++ i)
+	{
+		float2 xi = Hammersley2D(i, NUM_SAMPLES);
+		float3 h = ImportanceSampleGGX(xi, roughness, normal);
+		float3 l = -reflect(view, h);
+		float n_dot_v = saturate(dot(normal, view));
+		float n_dot_l = saturate(dot(normal, l));
+		float n_dot_h = saturate(dot(normal, h));
+		float v_dot_h = saturate(dot(view, h));
+		if (n_dot_l > 0)
+		{
+      float3 env_clr = decode_hdr_yc(skybox_Ycube_tex.SampleLevel(skybox_sampler, l, 0).r,
+				skybox_Ccube_tex.SampleLevel(skybox_sampler, l, 0)).xyz;
+
+			float fc = pow(1 - v_dot_h, 5);
+			float3 f = (1 - fc) * c_spec + fc;
+/*
+      float g = Vis_SmithJointApprox(roughness * roughness, n_dot_v, n_dot_l);
+      float pdf = n_dot_h / (4.0 * v_dot_h);
+      specular += env_clr * f * g * n_dot_l / pdf;  */
+
+			float g = GImplicit(n_dot_v, n_dot_l); //GeometrySchlickGGX(n_dot_v, roughness) * GeometrySchlickGGX(n_dot_l, roughness);
+      specular += env_clr * f * g * v_dot_h / max(1e-3f, n_dot_h * n_dot_v);
 		}
 	}
 
@@ -326,6 +371,80 @@ float3 ApproximateSpecularIBL(float3 c_spec, float glossiness, float3 normal, fl
 	return prefiltered_clr * (c_spec * env_brdf.x + env_brdf.y);
 }
 
+float3 PrefilterEnvMapGGX(float roughness, float3 r)
+{
+  const float PI = 3.1415926f;
+
+	float3 normal = r;
+	float3 view = r;
+	float3 prefiltered_clr = 0;
+	float total_weight = 0;
+
+	const uint NUM_SAMPLES = 64;
+	for (uint i = 0; i < NUM_SAMPLES; ++ i)
+	{
+		float2 xi = Hammersley2D(i, NUM_SAMPLES);
+		float3 h = ImportanceSampleGGX(xi, roughness, normal);
+		float3 l = -reflect(view, h);
+    float n_dot_h = saturate(dot(normal, h));
+    float h_dot_v = saturate(dot(view, h));
+		float n_dot_l = saturate(dot(normal, l));
+		if (n_dot_l > 0)
+		{/*
+      float d = DistributionGGX(normal, h, roughness);
+      float pdf = (d * n_dot_h / (4.0f * h_dot_v)) + 0.0001;
+      
+      float resolution = 512.0f;
+      float sa_texel = 4.0f * PI / (6.0f * resolution * resolution);
+      float sa_sample = 1.0f / (float(NUM_SAMPLES) * pdf + 0.0001f);
+      float mipLevel = roughness == 0.0f ? 0.0f : 0.5f * log2(sa_sample / sa_texel);*/
+
+      float mipLevel = 0.0f;
+      
+			prefiltered_clr += decode_hdr_yc(skybox_Ycube_tex.SampleLevel(skybox_sampler, l, mipLevel).r,
+				skybox_Ccube_tex.SampleLevel(skybox_sampler, l, mipLevel)).xyz * n_dot_l;
+			total_weight += n_dot_l;
+		}
+	}
+
+	return prefiltered_clr / max(1e-6f, total_weight);
+}
+
+float2 IntegrateBRDFGGX(float roughness, float n_dot_v)
+{
+	float3 view = float3(sqrt(1 - n_dot_v * n_dot_v), 0, n_dot_v);
+	float2 rg = 0;
+
+	const uint NUM_SAMPLES = 64;
+	for (uint i = 0; i < NUM_SAMPLES; ++ i)
+	{
+		float2 xi = Hammersley2D(i, NUM_SAMPLES);
+		float3 h = ImportanceSampleGGX(xi, roughness);
+		float3 l = -reflect(view, h);
+		float n_dot_l = saturate(l.z);
+		float n_dot_h = saturate(h.z);
+		float v_dot_h = saturate(dot(view, h));
+		if (n_dot_l > 0)
+		{
+			float g = GImplicit(n_dot_v, n_dot_l); //GeometrySchlickGGX(n_dot_v, roughness) * GeometrySchlickGGX(n_dot_l, roughness);
+			float g_vis = g * v_dot_h / max(1e-6f, n_dot_h * n_dot_v);
+			float fc = pow(1 - v_dot_h, 5);
+			rg += float2(1 - fc, fc) * g_vis;
+		}
+	}
+
+	return rg / NUM_SAMPLES;
+}
+
+float3 ApproximateSpecularGGXIBL(float3 c_spec, float roughness, float3 normal, float3 view)
+{
+	float n_dot_v = saturate(dot(normal, view));
+	float3 r = -reflect(view, normal);
+	float3 prefiltered_clr = PrefilterEnvMapGGX(roughness, r);
+	float2 env_brdf = IntegrateBRDFGGX(roughness, n_dot_v);
+	return prefiltered_clr * (c_spec * env_brdf.x + env_brdf.y);
+}
+
 float4 GroundTruthPS(float3 normal : TEXCOORD0, float3 incident : TEXCOORD1) : SV_Target
 {
 	normal = normalize(normal);
@@ -343,7 +462,25 @@ float4 ApproximatePS(float3 normal : TEXCOORD0, float3 incident : TEXCOORD1) : S
 	return float4(DiffuseIBL(diffuse, normal)
 		+ ApproximateSpecularIBL(specular, glossiness, normal, incident), 1);
 }
-		]]>
+
+float4 GroundTruthGGXPS(float3 normal : TEXCOORD0, float3 incident : TEXCOORD1) : SV_Target
+{
+	normal = normalize(normal);
+	incident = normalize(incident);
+
+	return float4(DiffuseIBL(diffuse, normal)
+		+ SpecularIBLGGX(specular, 1.0f - glossiness, normal, incident), 1);
+}
+
+float4 ApproximateGGXPS(float3 normal : TEXCOORD0, float3 incident : TEXCOORD1) : SV_Target
+{
+	normal = normalize(normal);
+	incident = normalize(incident);
+
+	return float4(DiffuseIBL(diffuse, normal)
+		+ ApproximateSpecularGGXIBL(specular, 1.0f - glossiness, normal, incident), 1);
+}
+  ]]>
 	</shader>
 
 	<technique name="GroundTruth">
@@ -358,7 +495,19 @@ float4 ApproximatePS(float3 normal : TEXCOORD0, float3 incident : TEXCOORD1) : S
 			<state name="pixel_shader" value="ApproximatePS()"/>
 		</pass>
 	</technique>
-	<technique name="Prefiltered">
+  <technique name="GroundTruthGGX">
+    <pass name="p0">
+      <state name="vertex_shader" value="GroundTruthVS()"/>
+      <state name="pixel_shader" value="GroundTruthGGXPS()"/>
+    </pass>
+  </technique>
+  <technique name="ApproximateGGX">
+    <pass name="p0">
+      <state name="vertex_shader" value="GroundTruthVS()"/>
+      <state name="pixel_shader" value="ApproximateGGXPS()"/>
+    </pass>
+  </technique>
+  <technique name="Prefiltered">
 		<pass name="p0">
 			<state name="vertex_shader" value="GroundTruthVS()"/>
 			<state name="pixel_shader" value="PrefilteredPS()"/>
