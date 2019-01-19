@@ -26,7 +26,10 @@ float DistributionGGX(float3 normal, float3 halfway, float roughness)
 float GeometrySchlickGGX(float n_dot_v, float roughness)
 {
   // http://graphicrants.blogspot.com.au/2013/08/specular-brdf-reference.html
+  roughness = max(1e-3f, roughness);
+  
   float k_ibl = roughness * roughness / 2.0;
+  //float k_ibl = (roughness + 1.0) * (roughness + 1.0) / 8.0;
   float nom = n_dot_v;
   float denom = n_dot_v * (1.0 - k_ibl) + k_ibl;
   

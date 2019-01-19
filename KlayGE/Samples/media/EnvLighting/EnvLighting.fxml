@@ -296,12 +296,9 @@ float3 SpecularIBLGGX(float3 c_spec, float roughness, float3 normal, float3 view
 
 			float fc = pow(1 - v_dot_h, 5);
 			float3 f = (1 - fc) * c_spec + fc;
-/*
-      float g = Vis_SmithJointApprox(roughness * roughness, n_dot_v, n_dot_l);
-      float pdf = n_dot_h / (4.0 * v_dot_h);
-      specular += env_clr * f * g * n_dot_l / pdf;  */
 
-			float g = GImplicit(n_dot_v, n_dot_l); //GeometrySchlickGGX(n_dot_v, roughness) * GeometrySchlickGGX(n_dot_l, roughness);
+      float g = GeometrySchlickGGX(n_dot_v, roughness) * GeometrySchlickGGX(n_dot_l, roughness);
+      //float g = GImplicit(n_dot_v, n_dot_l);
       specular += env_clr * f * g * v_dot_h / max(1e-3f, n_dot_h * n_dot_v);
 		}
 	}
@@ -426,7 +423,8 @@ float2 IntegrateBRDFGGX(float roughness, float n_dot_v)
 		float v_dot_h = saturate(dot(view, h));
 		if (n_dot_l > 0)
 		{
-			float g = GImplicit(n_dot_v, n_dot_l); //GeometrySchlickGGX(n_dot_v, roughness) * GeometrySchlickGGX(n_dot_l, roughness);
+			float g = GeometrySchlickGGX(n_dot_v, roughness) * GeometrySchlickGGX(n_dot_l, roughness);
+      //float g = GImplicit(n_dot_v, n_dot_l);
 			float g_vis = g * v_dot_h / max(1e-6f, n_dot_h * n_dot_v);
 			float fc = pow(1 - v_dot_h, 5);
 			rg += float2(1 - fc, fc) * g_vis;
