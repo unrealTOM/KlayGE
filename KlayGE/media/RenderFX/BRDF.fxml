@@ -32,6 +32,7 @@ float GeometrySchlickGGX(float n_dot_v, float roughness)
   //float k_ibl = (roughness + 1.0) * (roughness + 1.0) / 8.0;
   float nom = n_dot_v;
   float denom = n_dot_v * (1.0 - k_ibl) + k_ibl;
+  denom = max(1.0, denom);
   
   return nom / denom;
 }
