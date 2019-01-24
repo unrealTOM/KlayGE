@@ -53,7 +53,8 @@ void TutorFramework::DoUpdateOverlay()
 {
 	std::wostringstream stream;
 	stream.precision(2);
-	stream << std::fixed << this->FPS() << " FPS";
+	stream << std::fixed << this->FPS() << " FPS" << std::endl;
+	stream << "Gamma: " << (KlayGE::Context::Instance().Config().graphics_cfg.gamma ? "On" : "Off");
 
 	font_->RenderText(0, 0, KlayGE::Color(1, 1, 0, 1), L"Tutorial 1", 16);
 	font_->RenderText(0, 18, KlayGE::Color(1, 1, 0, 1), stream.str(), 16);
