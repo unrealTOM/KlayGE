@@ -39,7 +39,7 @@ SET(CONTENT_FILES
 	${KLAYGE_PROJECT_DIR}/media/Textures/2D/SMAASearchTex.dds
 	${KLAYGE_PROJECT_DIR}/media/Textures/2D/ui.dds
 	${KLAYGE_PROJECT_DIR}/media/Textures/3D/color_grading.dds
-	${KLAYGE_PROJECT_DIR}/Tutorials/media/VertexDisplacement/SimpleBezier.kfx
+	${KLAYGE_PROJECT_DIR}/Tutorials/media/SimpleBezier/SimpleBezier.kfx
 )
 
 IF(KLAYGE_PLATFORM_WINDOWS_STORE)
