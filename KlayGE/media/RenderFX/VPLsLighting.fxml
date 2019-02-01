@@ -39,15 +39,17 @@ void VPLsLightingInstanceIDVS(float4 pos : POSITION,
 				uint instance_id : SV_InstanceID,
 				out SS_TEXCOORD_TYPE oTc : TEXCOORD0,
 				out float3 oVPLColor : TEXCOORD1,
-				out float4 oViewDir : TEXCOORD2)
-{
-  oViewDir.w = (instance_id + 0.5f) * vpl_params.x;
+				out float4 oViewDir : TEXCOORD2,
+				out float4 oPos : SV_Position)
+{			
+	oViewDir.w = (instance_id + 0.5f) * vpl_params.x;
 
 	float4 albedo_atten = vpls_tex.SampleLevel(point_sampler, float2(oViewDir.w, 0.5f / 4), 0);
   
 	if (albedo_atten.x < 0)
 	{
 		oVPLColor = -1;
+		oPos = float4(-1, -1, -1, 0);
 		oViewDir = 0;
 		oTc = 0;
 	}
@@ -77,7 +79,7 @@ void VPLsLightingInstanceIDVS(float4 pos : POSITION,
 
 		float scale = sqrt(oVPLColor.x + oVPLColor.y + oVPLColor.z) * 10;
 		oViewDir.xyz = rot_pos * scale + offset;
-		float4 oPos = mul(float4(oViewDir.xyz, 1), proj);
+		oPos = mul(float4(oViewDir.xyz, 1), proj);
 
 		oTc = EncodeSSTexcoord(oPos);
 	}
