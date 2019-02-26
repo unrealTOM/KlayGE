@@ -31,18 +31,14 @@ DOWNLOAD_DEPENDENCY("KlayGE/media/Textures/Cube/uffizi_cross_filtered_c.dds" "0d
 DOWNLOAD_DEPENDENCY("KlayGE/media/Textures/Cube/uffizi_cross_filtered_y.dds" "c515b8aed52a6eafee96ea4d32b60eaf746ea985")
 DOWNLOAD_DEPENDENCY("KlayGE/media/Textures/Juda/klayge_logo.jdt" "4fed908fd641b6c536fee9f733dba37d4531079a")
 
-IF(KLAYGE_PLATFORM_WINDOWS_STORE)
-	STRING(REPLACE "/permissive-" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-ENDIF()
-
 SET(LIB_NAME ${KLAYGE_CORELIB_NAME})
 
 SET(BASE_SOURCE_FILES
 	${KLAYGE_PROJECT_DIR}/Core/Src/Base/Context.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Base/HWDetect.cpp
-	${KLAYGE_PROJECT_DIR}/Core/Src/Base/KlayGE.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Base/PerfProfiler.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Base/ResLoader.cpp
+	${KLAYGE_PROJECT_DIR}/Core/Src/Base/Signal.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Base/TableGen/Tables.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Base/TableGen/TableGen.py
 )
@@ -55,6 +51,7 @@ SET(BASE_HEADER_FILES
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/PerfProfiler.hpp
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/ResLoader.hpp
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/SALWrapper.hpp
+	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/Signal.hpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Base/TableGen/Tables.hpp
 )
 
@@ -520,9 +517,9 @@ ADD_LIBRARY(${LIB_NAME} ${KLAYGE_PREFERRED_LIB_TYPE}
 	${APP_SOURCE_FILES} ${APP_HEADER_FILES}
 )
 
-IF(KLAYGE_PLATFORM_WINDOWS_DESKTOP)
+IF(KLAYGE_PLATFORM_WINDOWS)
 	SET(EXTRA_LINKED_LIBRARIES ${EXTRA_LINKED_LIBRARIES}
-		wsock32)
+		ws2_32)
 ELSEIF(KLAYGE_PLATFORM_DARWIN)
 	FIND_LIBRARY(APPKIT AppKit "/")
 	FIND_LIBRARY(OPENGL OpenGL "/")
@@ -557,7 +554,7 @@ SET_TARGET_PROPERTIES(${LIB_NAME} PROPERTIES
 	FOLDER "KlayGE/Engine/Core"
 )
 
-KLAYGE_ADD_PRECOMPILED_HEADER(${LIB_NAME} "KlayGE/KlayGE.hpp" "${KLAYGE_PROJECT_DIR}/Core/Include" "${KLAYGE_PROJECT_DIR}/Core/Src/Base/KlayGE.cpp")
+KLAYGE_ADD_PRECOMPILED_HEADER(${LIB_NAME} "${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/KlayGE.hpp")
 
 TARGET_LINK_LIBRARIES(${LIB_NAME}
 	${EXTRA_LINKED_LIBRARIES}
@@ -582,3 +579,16 @@ if(KLAYGE_WITH_BOOST_FILESYSTEM)
 endif()
 
 ADD_DEPENDENCIES(AllInEngine ${LIB_NAME})
+
+if(KLAYGE_PLATFORM_WINDOWS_DESKTOP)
+	set(rc_lib_name "KlayGE_RC")
+	add_library(${rc_lib_name} OBJECT 
+		${KLAYGE_PROJECT_DIR}/media/KlayGE.rc
+		${KLAYGE_PROJECT_DIR}/klayge_logo.ico
+	)
+	set_target_properties(${rc_lib_name} PROPERTIES
+		FOLDER "KlayGE/Engine/Core"
+	)
+
+	add_dependencies(AllInEngine ${rc_lib_name})
+endif()

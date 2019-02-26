@@ -20,8 +20,6 @@
 #include <KlayGE/NetMsg.hpp>
 #include <KlayGE/Lobby.hpp>
 
-#ifndef KLAYGE_PLATFORM_WINDOWS_STORE
-
 namespace KlayGE
 {
 	// 构造函数
@@ -132,16 +130,8 @@ namespace KlayGE
 	/////////////////////////////////////////////////////////////////////////////////
 	char Lobby::NumPlayer() const
 	{
-		char n = 0;
-		for (auto const & player : players_)
-		{
-			if (player.first != 0)
-			{
-				++ n;
-			}
-		}
-
-		return n;
+		return static_cast<char>(std::count_if(
+			players_.begin(), players_.end(), [](std::pair<uint32_t, PlayerDes> const& player) { return (player.first != 0); }));
 	}
 
 	// 设置大厅名称
@@ -289,5 +279,3 @@ namespace KlayGE
 		}
 	}
 }
-
-#endif

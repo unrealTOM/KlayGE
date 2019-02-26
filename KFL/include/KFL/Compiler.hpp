@@ -189,7 +189,9 @@
 	#define KLAYGE_SYMBOL_EXPORT __declspec(dllexport)
 	#define KLAYGE_SYMBOL_IMPORT __declspec(dllimport)
 
-	#if _MSC_VER >= 1910
+	#if _MSC_VER >= 1920
+		#define KLAYGE_COMPILER_VERSION 142
+	#elif _MSC_VER >= 1910
 		#define KLAYGE_COMPILER_VERSION 141
 	#elif _MSC_VER >= 1900
 		#define KLAYGE_COMPILER_VERSION 140
@@ -219,13 +221,6 @@
 
 	#pragma warning(disable: 4251) // STL classes are not dllexport.
 	#pragma warning(disable: 4819) // Allow non-ANSI characters.
-
-	#ifndef _CRT_SECURE_NO_DEPRECATE
-		#define _CRT_SECURE_NO_DEPRECATE
-	#endif
-	#ifndef _SCL_SECURE_NO_DEPRECATE
-		#define _SCL_SECURE_NO_DEPRECATE
-	#endif
 
 	#define KLAYGE_ATTRIBUTE_NORETURN __declspec(noreturn)
 	#define KLAYGE_BUILTIN_UNREACHABLE __assume(false)

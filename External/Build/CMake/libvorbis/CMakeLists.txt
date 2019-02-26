@@ -1,13 +1,13 @@
 SET(VORBIS_PROJECT_DIR "${EXTERNAL_PROJECT_DIR}/libvorbis")
 SET(VORBIS_OUTPUT_DIR "${EXTERNAL_PROJECT_DIR}/lib/libvorbis/${KLAYGE_PLATFORM_NAME}")
 
-UpdateExternalLib("libvorbis" "https://github.com/gongminmin/vorbis.git" "f969b6525b6bae7cc4c36963ffde4b459e331f77" "FixForKlayGE" "master")
+UpdateExternalLib("libvorbis" "https://github.com/xiph/vorbis.git" "9eadeccdc4247127d91ac70555074239f5ce3529")
 
 SET(BUILD_SHARED_LIBS OFF)
 SET(BUILD_FRAMEWORK OFF)
 SET(OGG_ROOT ${VORBIS_PROJECT_DIR}/../libogg)
 SET(OGG_LIBRARIES ${EXTERNAL_PROJECT_DIR}/lib/libogg/${KLAYGE_PLATFORM_NAME}/ogg_static${KLAYGE_OUTPUT_SUFFIX})
-INCLUDE_DIRECTORIES(${EXTERNAL_PROJECT_DIR}/../Build/${KLAYGE_BUILD_FOLDER}/External/libogg/ogg/include)
+INCLUDE_DIRECTORIES(${PROJECT_BINARY_DIR}/External/libogg/ogg/include)
 IF(KLAYGE_PLATFORM_WINDOWS_STORE)
 	ADD_DEFINITIONS(-D_CRT_SECURE_NO_WARNINGS)
 ENDIF()
