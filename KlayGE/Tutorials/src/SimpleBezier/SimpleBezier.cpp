@@ -179,7 +179,7 @@ void SimpleBezier::OnCreate()
 	actionMap.AddActions(actions, actions + std::size(actions));
 
 	action_handler_t input_handler = MakeSharedPtr<input_signal>();
-	input_handler->connect(
+	input_handler->Connect(
 		[this](InputEngine const & sender, InputAction const & action)
 		{
 			this->InputHandler(sender, action);
@@ -272,14 +272,14 @@ uint32_t SimpleBezier::DoUpdate(uint32_t /*pass*/)
 	id_wireframe_ = dialog_->IDFromName("Wireframe");
 
     dialog_->Control<UISlider>(id_tessellation_factor_slider_)->SetValue(static_cast<int>(tess_factor_ * 10));
-	dialog_->Control<UISlider>(id_tessellation_factor_slider_)->OnValueChangedEvent().connect(
+	dialog_->Control<UISlider>(id_tessellation_factor_slider_)->OnValueChangedEvent().Connect(
         [this](UISlider const& sender) {
 	    	this->TessFactorChangedHandler(sender);
 	    }
     );
 	this->TessFactorChangedHandler(*dialog_->Control<UISlider>(id_tessellation_factor_slider_));
 
-	dialog_->Control<UIComboBox>(id_partition_type_combo_)->OnSelectionChangedEvent().connect(
+	dialog_->Control<UIComboBox>(id_partition_type_combo_)->OnSelectionChangedEvent().Connect(
         [this](UIComboBox const &sender)
         {
 		    this->PartitionTypeChangedHandler(sender);
@@ -287,7 +287,7 @@ uint32_t SimpleBezier::DoUpdate(uint32_t /*pass*/)
     );
 	this->PartitionTypeChangedHandler(*dialog_->Control<UIComboBox>(id_partition_type_combo_));
 
-    dialog_->Control<UICheckBox>(id_wireframe_)->OnChangedEvent().connect(
+    dialog_->Control<UICheckBox>(id_wireframe_)->OnChangedEvent().Connect(
         [this](UICheckBox const& sender) {
 	        this->WireframeHandler(sender);
 	    }
