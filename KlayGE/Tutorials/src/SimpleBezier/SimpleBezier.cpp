@@ -291,7 +291,7 @@ uint32_t SimpleBezier::DoUpdate(uint32_t /*pass*/)
         [this](UICheckBox const& sender) {
 	        this->WireframeHandler(sender);
 	    }
-    );
+    ); 
 	this->WireframeHandler(*dialog_->Control<UICheckBox>(id_wireframe_));
 
 	Color clear_clr(0.2f, 0.4f, 0.6f, 1);
