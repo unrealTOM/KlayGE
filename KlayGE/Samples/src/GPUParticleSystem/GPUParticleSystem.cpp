@@ -127,13 +127,6 @@ namespace
 		return ret;
 	}
 
-	struct Particle
-	{
-		float3 pos;
-		float3 vel;
-		float birth_time;
-	};
-
 	class RenderParticles : public Renderable
 	{
 	public:

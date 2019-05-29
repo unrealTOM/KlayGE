@@ -1,14 +1,14 @@
-#ifndef _SIMPLE_BEZIER_HPP
-#define _SIMPLE_BEZIER_HPP
+#ifndef _SOFT_PARTICLES_HPP
+#define _SOFT_PARTICLES_HPP
 
 #include <KlayGE/App3D.hpp>
 #include <KlayGE/Font.hpp>
 #include <KlayGE/CameraController.hpp>
 
-class SimpleBezier : public KlayGE::App3DFramework
+class SoftParticlesApp : public KlayGE::App3DFramework
 {
 public:
-	SimpleBezier();
+	SoftParticlesApp();
 
 private:
 	void OnCreate();
@@ -17,7 +17,7 @@ private:
 	void DoUpdateOverlay();
 	KlayGE::uint32_t DoUpdate(KlayGE::uint32_t pass);
 
-	void InputHandler(KlayGE::InputEngine const & sender, KlayGE::InputAction const & action);
+	void InputHandler(KlayGE::InputEngine const& sender, KlayGE::InputAction const& action);
 	void TessFactorChangedHandler(KlayGE::UISlider const& sender);
 	void PartitionTypeChangedHandler(KlayGE::UIComboBox const& sender);
 	void WireframeHandler(KlayGE::UICheckBox const& sender);
@@ -37,4 +37,4 @@ private:
 	int id_wireframe_;
 };
 
-#endif // _SIMPLE_BEZIER_HPP
+#endif // _SOFT_PARTICLES_HPP
