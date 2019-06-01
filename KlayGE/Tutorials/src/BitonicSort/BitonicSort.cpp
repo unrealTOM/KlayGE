@@ -65,15 +65,17 @@ namespace
 			technique_transpose_ = effect_->TechniqueByName("Transpose");
 			technique_bitonic_ = effect_->TechniqueByName("Bitonic");
 
-			uint32_t access_hint = EAH_GPU_Read | EAH_GPU_Write | EAH_GPU_Unordered;
+			uint32_t access_hint = EAH_GPU_Read | EAH_GPU_Write | EAH_GPU_Unordered | EAH_GPU_Structured;
 
 			buffer1_ = rf.MakeVertexBuffer(BU_Dynamic, access_hint, NUM_ELEMENTS * sizeof(uint32_t), nullptr, sizeof(uint32_t));
 			buffer1_uav_ = rf.MakeBufferUav(buffer1_, EF_R32UI);
 			buffer1_srv_ = rf.MakeBufferSrv(buffer1_, EF_R32UI);
 
-			buffer2_ = rf.MakeVertexBuffer(BU_Dynamic, access_hint, NUM_ELEMENTS * sizeof(uint32_t), nullptr, sizeof(float4));
+			buffer2_ = rf.MakeVertexBuffer(BU_Dynamic, access_hint, NUM_ELEMENTS * sizeof(uint32_t), nullptr, sizeof(uint32_t));
 			buffer2_uav_ = rf.MakeBufferUav(buffer2_, EF_R32UI);
 			buffer2_srv_ = rf.MakeBufferSrv(buffer2_, EF_R32UI);
+
+			result_cpu_buffer_ = rf.MakeVertexBuffer(BU_Dynamic, EAH_CPU_Read, buffer1_->Size(), nullptr);
 		}
 
 		void SetConstants(uint32_t iLevel, uint32_t iLevelMask, uint32_t iWidth, uint32_t iHeight)
@@ -110,8 +112,8 @@ namespace
 				SetConstants((level / BITONIC_BLOCK_SIZE), (level & ~NUM_ELEMENTS) / BITONIC_BLOCK_SIZE, MATRIX_WIDTH, MATRIX_HEIGHT);
 
 				// Transpose the data from buffer 1 into buffer 2
-				*(effect_->ParameterByName("Input")) = buffer1_srv_;
 				*(effect_->ParameterByName("Data")) = buffer2_uav_;
+				*(effect_->ParameterByName("Input")) = buffer1_srv_;
 				re.Dispatch(*effect_, *technique_transpose_, MATRIX_WIDTH / TRANSPOSE_BLOCK_SIZE, MATRIX_HEIGHT / TRANSPOSE_BLOCK_SIZE, 1);
 
 				// Sort the transposed column data
@@ -120,15 +122,16 @@ namespace
 				SetConstants(BITONIC_BLOCK_SIZE, level, MATRIX_HEIGHT, MATRIX_WIDTH);
 
 				// Transpose the data from buffer 2 back into buffer 1
-				*(effect_->ParameterByName("Input")) = buffer2_srv_;
 				*(effect_->ParameterByName("Data")) = buffer1_uav_;
+				*(effect_->ParameterByName("Input")) = buffer2_srv_;
 				re.Dispatch(*effect_, *technique_transpose_, MATRIX_HEIGHT / TRANSPOSE_BLOCK_SIZE, MATRIX_WIDTH / TRANSPOSE_BLOCK_SIZE, 1);
 
 				// Sort the row data
 				re.Dispatch(*effect_, *technique_bitonic_, NUM_ELEMENTS / BITONIC_BLOCK_SIZE, 1, 1);
 			}
 
-			GraphicsBuffer::Mapper Mapper(*buffer1_, BA_Read_Only);
+			buffer1_->CopyToBuffer(*result_cpu_buffer_);
+			GraphicsBuffer::Mapper Mapper(*result_cpu_buffer_, BA_Read_Only);
 			uint32_t const* pBuffer = reinterpret_cast<uint32_t const*>(Mapper.Pointer<uint32_t>());
 			memcpy(&results[0], pBuffer, NUM_ELEMENTS * sizeof(uint32_t));
 		}
@@ -138,6 +141,8 @@ namespace
 
 		RenderTechnique* technique_bitonic_ = nullptr;
 		RenderTechnique* technique_transpose_ = nullptr;
+
+		GraphicsBufferPtr result_cpu_buffer_;
 
 		GraphicsBufferPtr buffer1_;
 		UnorderedAccessViewPtr buffer1_uav_;
@@ -168,7 +173,7 @@ int SampleMain()
 
 BitonicSortApp::BitonicSortApp() : App3DFramework("Bitonic Sort")
 {
-	ResLoader::Instance().AddPath("../../Samples/media/BitonicSort");
+	ResLoader::Instance().AddPath("../../Tutorials/media/BitonicSort");
 }
 
 void BitonicSortApp::OnCreate()
@@ -239,7 +244,9 @@ uint32_t BitonicSortApp::DoUpdate(uint32_t /*pass*/)
 		clear_clr.g() = 0.133f;
 		clear_clr.b() = 0.325f;
 	}
-	re.CurFrameBuffer()->Clear(KlayGE::FrameBuffer::CBM_Color | KlayGE::FrameBuffer::CBM_Depth, clear_clr, 1.0f, 0);
 
+	checked_pointer_cast<BitonicSortObject>(bitonic_)->Update(this->AppTime(), this->FrameTime());
+
+	re.CurFrameBuffer()->Clear(KlayGE::FrameBuffer::CBM_Color | KlayGE::FrameBuffer::CBM_Depth, clear_clr, 1.0f, 0);
 	return KlayGE::App3DFramework::URV_NeedFlush | KlayGE::App3DFramework::URV_Finished;
 }
