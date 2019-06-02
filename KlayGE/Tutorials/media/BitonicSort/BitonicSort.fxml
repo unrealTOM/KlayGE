@@ -10,6 +10,8 @@
     <parameter type="uint" name="g_iHeight"/>
   </cbuffer>
 
+  <parameter type="append_structured_buffer" elem_type="uint" name="Debug"/>
+  
   <parameter type="structured_buffer" elem_type="uint" name="Input"/>
   <parameter type="rw_structured_buffer" elem_type="uint" name="Data"/>
 
@@ -17,7 +19,7 @@
     <![CDATA[
 //--------------------------------------------------------------------------------------
 
-#define BITONIC_BLOCK_SIZE 512
+#define BITONIC_BLOCK_SIZE 16
 #define TRANSPOSE_BLOCK_SIZE 16
 
 //--------------------------------------------------------------------------------------
@@ -46,6 +48,8 @@ void BitonicSort( uint3 Gid : SV_GroupID,
     
     // Store shared data
     Data[DTid.x] = shared_data[GI];
+    
+    //Debug.Append(Data[DTid.x]);
 }
 
 //--------------------------------------------------------------------------------------
