@@ -37,8 +37,8 @@ namespace
 	// The number of elements to sort is limited to an even power of 2
 	// At minimum 8,192 elements - BITONIC_BLOCK_SIZE * TRANSPOSE_BLOCK_SIZE
 	// At maximum 262,144 elements - BITONIC_BLOCK_SIZE * BITONIC_BLOCK_SIZE
-	const uint32_t NUM_ELEMENTS = 16 * 16;
-	const uint32_t BITONIC_BLOCK_SIZE = 16;
+	const uint32_t NUM_ELEMENTS = 512 * 512;
+	const uint32_t BITONIC_BLOCK_SIZE = 512;
 	const uint32_t TRANSPOSE_BLOCK_SIZE = 16;
 	const uint32_t MATRIX_WIDTH = BITONIC_BLOCK_SIZE;
 	const uint32_t MATRIX_HEIGHT = NUM_ELEMENTS / BITONIC_BLOCK_SIZE;
@@ -67,15 +67,12 @@ namespace
 			uint32_t access_hint = EAH_GPU_Read | EAH_GPU_Write | EAH_GPU_Unordered | EAH_GPU_Structured;
 
 			buffer1_ = rf.MakeVertexBuffer(BU_Dynamic, access_hint, NUM_ELEMENTS * sizeof(uint32_t), nullptr, sizeof(uint32_t));
-//			buffer1_uav_ = rf.MakeBufferUav(buffer1_, EF_R32UI);
-//			buffer1_srv_ = rf.MakeBufferSrv(buffer1_, EF_R32UI);
+			buffer1_uav_ = rf.MakeBufferUav(buffer1_, EF_R32UI);
+			buffer1_srv_ = rf.MakeBufferSrv(buffer1_, EF_R32UI);
 
 			buffer2_ = rf.MakeVertexBuffer(BU_Dynamic, access_hint, NUM_ELEMENTS * sizeof(uint32_t), nullptr, sizeof(uint32_t));
-//			buffer2_uav_ = rf.MakeBufferUav(buffer2_, EF_R32UI);
-//			buffer2_srv_ = rf.MakeBufferSrv(buffer2_, EF_R32UI);
-
-			debug_buf_ = rf.MakeVertexBuffer(BU_Dynamic, access_hint, NUM_ELEMENTS * sizeof(uint32_t), nullptr, sizeof(uint32_t));
-			debug_buf_uav_ = rf.MakeBufferUav(debug_buf_, EF_R32UI);
+			buffer2_uav_ = rf.MakeBufferUav(buffer2_, EF_R32UI);
+			buffer2_srv_ = rf.MakeBufferSrv(buffer2_, EF_R32UI);
 
 			result_cpu_buffer_ = rf.MakeVertexBuffer(BU_Dynamic, EAH_CPU_Read, buffer1_->Size(), nullptr);
 		}
@@ -91,13 +88,11 @@ namespace
 		void Update(float /*app_time*/, float /*elapsed_time*/)
 		{
 			RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+			re.BindFrameBuffer(FrameBufferPtr());
 
 			// Upload the data
 			std::generate(data.begin(), data.end(), SampleRand);
 			buffer1_->UpdateSubresource(0, NUM_ELEMENTS * sizeof(uint32_t), &data[0]);
-
-			//*(effect_->ParameterByName("Debug")) = debug_buf_uav_;
 
 			// Sort the data
 			// First sort the rows for the levels <= to the block size
@@ -106,7 +101,7 @@ namespace
 				SetConstants(level, level, MATRIX_HEIGHT, MATRIX_WIDTH);
 
 				// Sort the row data
-				*(effect_->ParameterByName("Data")) = rf.MakeBufferUav(buffer1_, EF_R32UI); //buffer1_uav_;
+				*(effect_->ParameterByName("Data")) = buffer1_uav_;
 				re.Dispatch(*effect_, *technique_bitonic_, NUM_ELEMENTS / BITONIC_BLOCK_SIZE, 1, 1);
 			}
 
@@ -117,8 +112,8 @@ namespace
 				SetConstants((level / BITONIC_BLOCK_SIZE), (level & ~NUM_ELEMENTS) / BITONIC_BLOCK_SIZE, MATRIX_WIDTH, MATRIX_HEIGHT);
 
 				// Transpose the data from buffer 1 into buffer 2
-				*(effect_->ParameterByName("Data")) = rf.MakeBufferUav(buffer2_, EF_R32UI); //buffer2_uav_;
-				*(effect_->ParameterByName("Input")) = rf.MakeBufferSrv(buffer1_, EF_R32UI); //buffer1_srv_;
+				*(effect_->ParameterByName("Data")) = buffer2_uav_;
+				*(effect_->ParameterByName("Input")) = buffer1_srv_;
 				re.Dispatch(*effect_, *technique_transpose_, MATRIX_WIDTH / TRANSPOSE_BLOCK_SIZE, MATRIX_HEIGHT / TRANSPOSE_BLOCK_SIZE, 1);
 
 				// Sort the transposed column data
@@ -127,8 +122,8 @@ namespace
 				SetConstants(BITONIC_BLOCK_SIZE, level, MATRIX_HEIGHT, MATRIX_WIDTH);
 
 				// Transpose the data from buffer 2 back into buffer 1
-				*(effect_->ParameterByName("Data")) = rf.MakeBufferUav(buffer1_, EF_R32UI); //buffer1_uav_;
-				*(effect_->ParameterByName("Input")) = rf.MakeBufferSrv(buffer2_, EF_R32UI); //buffer2_srv_;
+				*(effect_->ParameterByName("Data")) = buffer1_uav_;
+				*(effect_->ParameterByName("Input")) = buffer2_srv_;
 				re.Dispatch(*effect_, *technique_transpose_, MATRIX_HEIGHT / TRANSPOSE_BLOCK_SIZE, MATRIX_WIDTH / TRANSPOSE_BLOCK_SIZE, 1);
 
 				// Sort the row data
@@ -140,10 +135,13 @@ namespace
 			uint32_t const* pBuffer = reinterpret_cast<uint32_t const*>(Mapper.Pointer<uint32_t>());
 
 			std::sort(data.begin(), data.end());
-			if (std::memcmp(&data[0], pBuffer, NUM_ELEMENTS * sizeof(uint32_t)))
-				printf("result Mismatch!\n");
-			else
-				printf("sort successful!\n");
+			bool bComparisonSucceeded = true;
+			for (uint32_t i = 0; i < NUM_ELEMENTS; ++i)
+			{
+				if (data[i] != pBuffer[i])
+					bComparisonSucceeded = false;
+			}
+			printf("Comparison %s\n", (bComparisonSucceeded) ? "Succeeded" : "FAILED");
 		}
 
 	private:
@@ -153,16 +151,16 @@ namespace
 		RenderTechnique* technique_transpose_ = nullptr;
 
 		GraphicsBufferPtr result_cpu_buffer_;
-		GraphicsBufferPtr debug_buf_;
-		UnorderedAccessViewPtr debug_buf_uav_;
+//		GraphicsBufferPtr debug_buf_;
+//		UnorderedAccessViewPtr debug_buf_uav_;
 
 		GraphicsBufferPtr buffer1_;
-//		UnorderedAccessViewPtr buffer1_uav_;
-//		ShaderResourceViewPtr buffer1_srv_;
+		UnorderedAccessViewPtr buffer1_uav_;
+		ShaderResourceViewPtr buffer1_srv_;
 
 		GraphicsBufferPtr buffer2_;
-//		UnorderedAccessViewPtr buffer2_uav_;
-//		ShaderResourceViewPtr buffer2_srv_;
+		UnorderedAccessViewPtr buffer2_uav_;
+		ShaderResourceViewPtr buffer2_srv_;
 	};
 
 	enum

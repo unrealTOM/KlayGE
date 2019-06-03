@@ -3,6 +3,9 @@
 <effect>
   <include name="util.fxml"/>
 
+  <macro name ="BITONIC_BLOCK_SIZE" value="512"/>
+  <macro name ="TRANSPOSE_BLOCK_SIZE" value="16"/>
+
   <cbuffer name="CB">
     <parameter type="uint" name="g_iLevel"/>
     <parameter type="uint" name="g_iLevelMask"/>
@@ -19,18 +22,13 @@
     <![CDATA[
 //--------------------------------------------------------------------------------------
 
-#define BITONIC_BLOCK_SIZE 16
-#define TRANSPOSE_BLOCK_SIZE 16
-
 //--------------------------------------------------------------------------------------
 // Bitonic Sort Compute Shader
 //--------------------------------------------------------------------------------------
-groupshared unsigned int shared_data[BITONIC_BLOCK_SIZE];
+groupshared uint shared_data[BITONIC_BLOCK_SIZE];
 
 [numthreads(BITONIC_BLOCK_SIZE, 1, 1)]
-void BitonicSort( uint3 Gid : SV_GroupID, 
-                  uint3 DTid : SV_DispatchThreadID, 
-                  uint3 GTid : SV_GroupThreadID, 
+void BitonicSort( uint3 DTid : SV_DispatchThreadID, 
                   uint GI : SV_GroupIndex )
 {
     // Load shared data
@@ -38,9 +36,9 @@ void BitonicSort( uint3 Gid : SV_GroupID,
     GroupMemoryBarrierWithGroupSync();
     
     // Sort the shared data
-    for (unsigned int j = g_iLevel >> 1 ; j > 0 ; j >>= 1)
+    for (uint j = g_iLevel >> 1 ; j > 0 ; j >>= 1)
     {
-        unsigned int result = ((shared_data[GI & ~j] <= shared_data[GI | j]) == (bool)(g_iLevelMask & DTid.x))? shared_data[GI ^ j] : shared_data[GI];
+        uint result = ((shared_data[GI & ~j] <= shared_data[GI | j]) == (bool)(g_iLevelMask & DTid.x))? shared_data[GI ^ j] : shared_data[GI];
         GroupMemoryBarrierWithGroupSync();
         shared_data[GI] = result;
         GroupMemoryBarrierWithGroupSync();
@@ -55,11 +53,10 @@ void BitonicSort( uint3 Gid : SV_GroupID,
 //--------------------------------------------------------------------------------------
 // Matrix Transpose Compute Shader
 //--------------------------------------------------------------------------------------
-groupshared unsigned int transpose_shared_data[TRANSPOSE_BLOCK_SIZE * TRANSPOSE_BLOCK_SIZE];
+groupshared uint transpose_shared_data[TRANSPOSE_BLOCK_SIZE * TRANSPOSE_BLOCK_SIZE];
 
 [numthreads(TRANSPOSE_BLOCK_SIZE, TRANSPOSE_BLOCK_SIZE, 1)]
-void MatrixTranspose( uint3 Gid : SV_GroupID, 
-                      uint3 DTid : SV_DispatchThreadID, 
+void MatrixTranspose( uint3 DTid : SV_DispatchThreadID, 
                       uint3 GTid : SV_GroupThreadID, 
                       uint GI : SV_GroupIndex )
 {
@@ -71,13 +68,13 @@ void MatrixTranspose( uint3 Gid : SV_GroupID,
 		]]>
   </shader>
 
-  <technique name="Transpose">
+  <technique name="Bitonic">
     <pass name="p0">
       <state name="compute_shader" value="BitonicSort()"/>
     </pass>
   </technique>
   
-  <technique name="Bitonic">
+  <technique name="Transpose">
     <pass name="p0">
       <state name="compute_shader" value="MatrixTranspose()"/>
     </pass>
