@@ -172,12 +172,8 @@ namespace KlayGE
 					new_metadata.slot_ = RenderMaterial::TS_Albedo;
 					break;
 
-				case CT_HASH("metalness"):
-					new_metadata.slot_ = RenderMaterial::TS_Metalness;
-					break;
-
-				case CT_HASH("glossiness"):
-					new_metadata.slot_ = RenderMaterial::TS_Glossiness;
+				case CT_HASH("metalness_glossiness"):
+					new_metadata.slot_ = RenderMaterial::TS_MetalnessGlossiness;
 					break;
 
 				case CT_HASH("emissive"):
@@ -190,6 +186,10 @@ namespace KlayGE
 
 				case CT_HASH("height"):
 					new_metadata.slot_ = RenderMaterial::TS_Height;
+					break;
+
+				case CT_HASH("occlusion"):
+					new_metadata.slot_ = RenderMaterial::TS_Occlusion;
 					break;
 
 				default:
@@ -278,7 +278,7 @@ namespace KlayGE
 				for (auto iter = channel_mapping_val.Begin(); (iter != channel_mapping_val.End()) && (index < 4); ++ iter, ++ index)
 				{
 					BOOST_ASSERT(iter->IsInt() || iter->IsUint() || iter->IsInt64() || iter->IsUint64());
-					new_metadata.channel_mapping_[index] = static_cast<uint8_t>(GetInt(*iter));
+					new_metadata.channel_mapping_[index] = static_cast<int8_t>(GetInt(*iter));
 				}
 			}
 
@@ -290,9 +290,7 @@ namespace KlayGE
 			}
 			else if (assign_default_values)
 			{
-				new_metadata.rgb_to_lum_
-					= ((new_metadata.slot_ == RenderMaterial::TS_Glossiness) || (new_metadata.slot_ == RenderMaterial::TS_Metalness)
-						|| (new_metadata.slot_ == RenderMaterial::TS_Height));
+				new_metadata.rgb_to_lum_ = (new_metadata.slot_ == RenderMaterial::TS_Height);
 			}
 
 			if (document.HasMember("mipmap"))
@@ -334,8 +332,9 @@ namespace KlayGE
 				new_metadata.mipmap_.auto_gen = true;
 			}
 
-			if (((new_metadata.slot_ == RenderMaterial::TS_Normal) || (new_metadata.slot_ == RenderMaterial::TS_Height))
-				&& document.HasMember("bump"))
+			if (((new_metadata.slot_ == RenderMaterial::TS_Normal) || (new_metadata.slot_ == RenderMaterial::TS_Height) ||
+					(new_metadata.slot_ == RenderMaterial::TS_Occlusion)) &&
+				document.HasMember("bump"))
 			{
 				auto const & bump_val = document["bump"];
 
@@ -350,6 +349,18 @@ namespace KlayGE
 					auto const & scale_val = bump_val["scale"];
 					BOOST_ASSERT(scale_val.IsNumber());
 					new_metadata.bump_.scale = GetFloat(scale_val);
+				}
+				if (bump_val.HasMember("to_occlusion"))
+				{
+					auto const& to_occlusion_val = bump_val["to_occlusion"];
+					BOOST_ASSERT(to_occlusion_val.IsBool());
+					new_metadata.bump_.to_occlusion = to_occlusion_val.GetBool();
+				}
+				if (bump_val.HasMember("occlusion_amplitude"))
+				{
+					auto const& occlusion_amplitude_val = bump_val["occlusion_amplitude"];
+					BOOST_ASSERT(occlusion_amplitude_val.IsNumber());
+					new_metadata.bump_.occlusion_amplitude = GetFloat(occlusion_amplitude_val);
 				}
 
 				if (bump_val.HasMember("from_normal"))
@@ -400,7 +411,7 @@ namespace KlayGE
 		}
 		else if (!name.empty())
 		{
-			LogError() << "Could NOT find " << name << ". Fallback to default metadata." << std::endl;
+			LogInfo() << "Could NOT find " << name << ". Fallback to default metadata." << std::endl;
 		}
 
 		*this = std::move(new_metadata);
@@ -424,12 +435,8 @@ namespace KlayGE
 			slot_str = "albedo";
 			break;
 
-		case RenderMaterial::TS_Metalness:
-			slot_str = "metalness";
-			break;
-
-		case RenderMaterial::TS_Glossiness:
-			slot_str = "glossiness";
+		case RenderMaterial::TS_MetalnessGlossiness:
+			slot_str = "metalness_glossiness";
 			break;
 
 		case RenderMaterial::TS_Emissive:
@@ -518,7 +525,7 @@ namespace KlayGE
 		bool need_swizzle = false;
 		for (size_t i = 0; i < std::size(channel_mapping_); ++ i)
 		{
-			if (channel_mapping_[i] != i)
+			if (channel_mapping_[i] != static_cast<int8_t>(i))
 			{
 				need_swizzle = true;
 				break;
@@ -553,8 +560,8 @@ namespace KlayGE
 			document.AddMember("mipmap", mipmap_val, allocator);
 		}
 
-		if (((slot_ == RenderMaterial::TS_Normal) || (slot_ == RenderMaterial::TS_Height))
-			&& (bump_.to_normal || bump_.from_normal))
+		if (((slot_ == RenderMaterial::TS_Normal) || (slot_ == RenderMaterial::TS_Height) || (slot_ == RenderMaterial::TS_Occlusion)) &&
+			(bump_.to_normal || bump_.from_normal || bump_.to_occlusion))
 		{
 			rapidjson::Value bump_val;
 			bump_val.SetObject();
@@ -563,6 +570,11 @@ namespace KlayGE
 			{
 				bump_val.AddMember("to_normal", bump_.to_normal, allocator);
 				bump_val.AddMember("scale", bump_.scale, allocator);
+			}
+			if ((slot_ == RenderMaterial::TS_Occlusion) && bump_.to_occlusion)
+			{
+				bump_val.AddMember("to_occlusion", bump_.to_normal, allocator);
+				bump_val.AddMember("occlusion_amplitude", bump_.occlusion_amplitude, allocator);
 			}
 			if ((slot_ == RenderMaterial::TS_Height) && bump_.from_normal)
 			{
@@ -619,13 +631,9 @@ namespace KlayGE
 				prefered_format_ = caps.BestMatchTextureFormat({ EF_BC7_SRGB, EF_BC1_SRGB, EF_ETC1 });
 				break;
 
-			case RenderMaterial::TS_Glossiness:
-			case RenderMaterial::TS_Metalness:
-				prefered_format_ = caps.BestMatchTextureFormat({ EF_BC4, EF_BC1, EF_ETC1 });
-				break;
-
+			case RenderMaterial::TS_MetalnessGlossiness:
 			case RenderMaterial::TS_Normal:
-				prefered_format_ = caps.BestMatchTextureFormat({ EF_BC5, EF_BC3, EF_GR8 });
+				prefered_format_ = caps.BestMatchTextureFormat({EF_BC5, EF_BC3, EF_GR8});
 				break;
 
 			case RenderMaterial::TS_Height:

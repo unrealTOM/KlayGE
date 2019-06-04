@@ -52,6 +52,15 @@ using namespace KlayGE;
 
 int main(int argc, char* argv[])
 {
+	Context::Instance().LoadCfg("KlayGE.cfg");
+	ContextCfg context_cfg = Context::Instance().Config();
+	context_cfg.graphics_cfg.hide_win = true;
+	context_cfg.graphics_cfg.hdr = false;
+	context_cfg.graphics_cfg.ppaa = false;
+	context_cfg.graphics_cfg.gamma = false;
+	context_cfg.graphics_cfg.color_grading = false;
+	Context::Instance().Config(context_cfg);
+
 	std::string input_name;
 	std::string metadata_name;
 	std::string output_name;
@@ -151,7 +160,7 @@ int main(int argc, char* argv[])
 	filesystem::path const output_path(output_name);
 	if (output_path.extension() == ".model_bin")
 	{
-		uint32_t const MODEL_BIN_VERSION = 16;
+		uint32_t const MODEL_BIN_VERSION = 17;
 
 		ResIdentifierPtr output_file = ResLoader::Instance().Open(output_name);
 		if (output_file)
@@ -211,7 +220,7 @@ int main(int argc, char* argv[])
 					size_t num_triangles = 0;
 					for (uint32_t mindex = 0; mindex < model->NumMeshes(); ++ mindex)
 					{
-						auto const & mesh = *checked_cast<StaticMesh*>(model->Mesh(mindex).get());
+						auto const& mesh = checked_cast<StaticMesh&>(*model->Mesh(mindex));
 
 						num_vertices += mesh.NumVertices(lod);
 						num_triangles += mesh.NumIndices(lod) / 3;

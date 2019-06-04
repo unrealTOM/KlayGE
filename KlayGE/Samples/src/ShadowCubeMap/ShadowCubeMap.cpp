@@ -57,11 +57,11 @@ namespace
 			pass_index_ = pass_index;
 		}
 
-		void LightSrc(LightSourcePtr const & light_src)
+		void LightSrc(LightSourcePtr const& light_src)
 		{
 			light_pos_ = light_src->Position();
 
-			float4x4 light_model = MathLib::to_matrix(light_src->Rotation()) * MathLib::translation(light_src->Position());
+			float4x4 const light_model = light_src->BoundSceneNode()->TransformToParent();
 			inv_light_model_ = MathLib::inverse(light_model);
 
 			App3DFramework const & app = Context::Instance().AppInstance();
@@ -200,13 +200,12 @@ namespace
 			StaticMesh::DoBuildMeshInfo(model);
 
 			*(effect_->ParameterByName("albedo_tex")) = textures_[RenderMaterial::TS_Albedo];
-			*(effect_->ParameterByName("metalness_tex")) = textures_[RenderMaterial::TS_Metalness];
-			*(effect_->ParameterByName("glossiness_tex")) = textures_[RenderMaterial::TS_Glossiness];
+			*(effect_->ParameterByName("metalness_glossiness_tex")) = textures_[RenderMaterial::TS_MetalnessGlossiness];
 			*(effect_->ParameterByName("emissive_tex")) = textures_[RenderMaterial::TS_Emissive];
 
 			*(effect_->ParameterByName("albedo_clr")) = mtl_->albedo;
-			*(effect_->ParameterByName("metalness_clr")) = float2(mtl_->metalness, !!textures_[RenderMaterial::TS_Metalness]);
-			*(effect_->ParameterByName("glossiness_clr")) = float2(mtl_->glossiness, !!textures_[RenderMaterial::TS_Glossiness]);
+			*(effect_->ParameterByName("metalness_glossiness_factor")) =
+				float3(mtl_->metalness, mtl_->glossiness, !!textures_[RenderMaterial::TS_MetalnessGlossiness]);
 			*(effect_->ParameterByName("emissive_clr")) = float4(mtl_->emissive.x(), mtl_->emissive.y(), mtl_->emissive.z(),
 				!!textures_[RenderMaterial::TS_Emissive]);
 			*(effect_->ParameterByName("albedo_map_enabled")) = static_cast<int32_t>(!!textures_[RenderMaterial::TS_Albedo]);
@@ -343,14 +342,15 @@ namespace
 	};
 
 
-	class PointLightSourceUpdate
+	class PointLightNodeUpdate
 	{
 	public:
-		void operator()(LightSource& light, float app_time, float /*elapsed_time*/)
+		void operator()(SceneNode& node, float app_time, float elapsed_time)
 		{
-			light.ModelMatrix(MathLib::rotation_z(0.4f)
-				* MathLib::rotation_y(app_time / 1.4f)
-				* MathLib::translation(2.0f, 12.0f, 4.0f));
+			KFL_UNUSED(elapsed_time);
+
+			node.TransformToParent(
+				MathLib::rotation_z(0.4f) * MathLib::rotation_y(app_time / 1.4f) * MathLib::translation(2.0f, 12.0f, 4.0f));
 		}
 	};
 
@@ -445,16 +445,21 @@ void ShadowCubeMap::OnCreate()
 	}
 	shadow_dual_tex_ = rf.MakeTexture2D(SHADOW_MAP_SIZE * 2,  SHADOW_MAP_SIZE, 1, 1, fmt, 1, 0, EAH_GPU_Read);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	light_ = MakeSharedPtr<PointLightSource>();
 	light_->Attrib(0);
 	light_->Color(float3(20, 20, 20));
 	light_->Falloff(float3(1, 1, 0));
-	light_->BindUpdateFunc(PointLightSourceUpdate());
-	light_->AddToSceneManager();
 
-	light_proxy_ = MakeSharedPtr<SceneObjectLightSourceProxy>(light_);
-	light_proxy_->Scaling(0.5f, 0.5f, 0.5f);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(light_proxy_->RootNode());
+	auto light_proxy = LoadLightSourceProxyModel(light_);
+	light_proxy->RootNode()->TransformToParent(MathLib::scaling(0.5f, 0.5f, 0.5f) * light_proxy->RootNode()->TransformToParent());
+
+	auto light_node = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable);
+	light_node->AddComponent(light_);
+	light_node->AddChild(light_proxy->RootNode());
+	light_node->OnMainThreadUpdate().Connect(PointLightNodeUpdate());
+	root_node.AddChild(light_node);
 
 	for (int i = 0; i < 6; ++ i)
 	{
@@ -610,14 +615,14 @@ uint32_t ShadowCubeMap::DoUpdate(uint32_t pass)
 			else
 			{
 				auto const & teapot = teapot_model_->Mesh(0);
-				auto so = MakeSharedPtr<SceneNode>(teapot, SceneNode::SOA_Cullable | SceneNode::SOA_Moveable);
-				auto* so_ptr = so.get();
+				auto so =
+					MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableComponent>(teapot), SceneNode::SOA_Cullable | SceneNode::SOA_Moveable);
 				so->OnSubThreadUpdate().Connect(
-					[so_ptr](float app_time, float elapsed_time)
+					[](SceneNode& node, float app_time, float elapsed_time)
 					{
 						KFL_UNUSED(elapsed_time);
 
-						so_ptr->TransformToParent(MathLib::scaling(5.0f, 5.0f, 5.0f) * MathLib::translation(5.0f, 5.0f, 0.0f)
+						node.TransformToParent(MathLib::scaling(5.0f, 5.0f, 5.0f) * MathLib::translation(5.0f, 5.0f, 0.0f)
 							* MathLib::rotation_y(-app_time / 1.5f));
 					});
 				{
@@ -646,9 +651,12 @@ uint32_t ShadowCubeMap::DoUpdate(uint32_t pass)
 		case 0:
 		case 1:
 			{
-				float3 pos = light_->Position();
-				float3 lookat = light_->Position() + ((0 == pass) ? 1.0f : -1.0f) * light_->Direction();
-				shadow_dual_buffers_[pass]->GetViewport()->camera->ViewParams(pos, lookat);
+				float3 const pos = light_->Position();
+				float3 const lookat = light_->Position() + ((0 == pass) ? 1.0f : -1.0f) * light_->Direction();
+
+				auto& camera = *shadow_dual_buffers_[pass]->GetViewport()->camera;
+				camera.LookAtDist(MathLib::length(lookat - pos));
+				camera.BoundSceneNode()->TransformToWorld(MathLib::inverse(MathLib::look_at_lh(pos, lookat)));
 
 				renderEngine.BindFrameBuffer(shadow_dual_buffers_[pass]);
 				renderEngine.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, Color(0.0f, 0.0f, 0.0f, 1), 1.0f, 0);
@@ -745,7 +753,12 @@ uint32_t ShadowCubeMap::DoUpdate(uint32_t pass)
 			{
 			case 0:
 				{
-					shadow_cube_one_buffer_->GetViewport()->camera->ViewParams(light_->Position(), light_->Position() + light_->Direction());
+					float3 const& pos = light_->Position();
+					float3 const lookat = pos + light_->Direction();
+
+					auto& camera = *shadow_cube_one_buffer_->GetViewport()->camera;
+					camera.LookAtDist(MathLib::length(lookat - pos));
+					camera.BoundSceneNode()->TransformToWorld(MathLib::inverse(MathLib::look_at_lh(pos, lookat)));
 
 					renderEngine.BindFrameBuffer(shadow_cube_one_buffer_);
 					renderEngine.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, Color(0.0f, 0.0f, 0.0f, 1), 1.0f, 0);

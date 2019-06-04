@@ -176,15 +176,15 @@ namespace
 	};
 
 
-	class PointLightSourceUpdate
+	class PointLightNodeUpdate
 	{
 	public:
-		void operator()(LightSource& light, float app_time, float /*elapsed_time*/)
+		void operator()(SceneNode& node, float app_time, float elapsed_time)
 		{
-			float4x4 matRot = MathLib::rotation_z(app_time);
+			KFL_UNUSED(elapsed_time);
 
-			float3 light_pos(1, 0, -1);
-			light.Position(MathLib::transform_coord(light_pos, matRot));
+			float4x4 const mat_rot = MathLib::rotation_z(app_time);
+			node.TransformToParent(MathLib::translation(MathLib::transform_coord(float3(1, 0, -1), mat_rot)));
 		}
 	};
 
@@ -222,7 +222,7 @@ void DistanceMapping::OnCreate()
 	font_ = SyncLoadFont("gkai00mp.kfont");
 
 	polygon_renderable_ = MakeSharedPtr<RenderPolygon>();
-	polygon_ = MakeSharedPtr<SceneNode>(polygon_renderable_, SceneNode::SOA_Cullable);
+	polygon_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableComponent>(polygon_renderable_), SceneNode::SOA_Cullable);
 	polygon_->TransformToParent(MathLib::rotation_x(-0.5f));
 	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(polygon_);
 
@@ -233,17 +233,22 @@ void DistanceMapping::OnCreate()
 	fpcController_.AttachCamera(this->ActiveCamera());
 	fpcController_.Scalers(0.05f, 0.1f);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	light_ = MakeSharedPtr<PointLightSource>();
 	light_->Attrib(0);
 	light_->Color(float3(2, 2, 2));
 	light_->Falloff(float3(1, 0, 1.0f));
-	light_->Position(float3(1, 0, -1));
-	light_->BindUpdateFunc(PointLightSourceUpdate());
-	light_->AddToSceneManager();
 
-	light_proxy_ = MakeSharedPtr<SceneObjectLightSourceProxy>(light_);
-	light_proxy_->Scaling(0.05f, 0.05f, 0.05f);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(light_proxy_->RootNode());
+	auto light_proxy = LoadLightSourceProxyModel(light_);
+	light_proxy->RootNode()->TransformToParent(MathLib::scaling(0.05f, 0.05f, 0.05f) * light_proxy->RootNode()->TransformToParent());
+
+	auto light_node = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable | SceneNode::SOA_Moveable);
+	light_node->TransformToParent(MathLib::translation(1.0f, 0.0f, -1.0f));
+	light_node->AddComponent(light_);
+	light_node->AddChild(light_proxy->RootNode());
+	light_node->OnMainThreadUpdate().Connect(PointLightNodeUpdate());
+	root_node.AddChild(light_node);
 
 	checked_pointer_cast<RenderPolygon>(polygon_renderable_)->LightFalloff(light_->Falloff());
 

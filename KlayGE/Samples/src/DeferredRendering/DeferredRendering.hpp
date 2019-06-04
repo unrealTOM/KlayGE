@@ -25,14 +25,13 @@ private:
 	void ILScaleChangedHandler(KlayGE::UISlider const & sender);
 	void SSVOHandler(KlayGE::UICheckBox const & sender);
 	void HDRHandler(KlayGE::UICheckBox const & sender);
-	void AntiAliasHandler(KlayGE::UICheckBox const & sender);
+	void AntiAliasHandler(KlayGE::UICheckBox const& sender);
+	void DepthOfFieldHandler(KlayGE::UICheckBox const& sender);
+	void BokehHandler(KlayGE::UICheckBox const& sender);
 	void NumLightsChangedHandler(KlayGE::UISlider const & sender);
 	void CtrlCameraHandler(KlayGE::UICheckBox const & sender);
 
 	KlayGE::FontPtr font_;
-	KlayGE::SceneObjectLightSourceProxyPtr spot_light_src_[3];
-
-	KlayGE::SceneNodePtr sky_box_;
 
 	KlayGE::FirstPersonCameraController fpcController_;
 
@@ -43,6 +42,8 @@ private:
 	bool ssvo_enabled_;
 	bool hdr_enabled_;
 	int anti_alias_enabled_;
+	bool dof_enabled_ = false;
+	bool bokeh_enabled_ = false;
 
 	float il_scale_;
 
@@ -53,13 +54,15 @@ private:
 	int id_ssvo_;
 	int id_hdr_;
 	int id_aa_;
+	int id_dof_;
+	int id_bokeh_;
 	int id_num_lights_static_;
 	int id_num_lights_slider_;
 	int id_ctrl_camera_;
 
-	KlayGE::SpotLightSourcePtr spot_light_[3];
-	std::vector<KlayGE::LightSourcePtr> particle_lights_;
-	std::vector<KlayGE::SceneObjectLightSourceProxyPtr> particle_light_srcs_;
+	std::vector<KlayGE::SceneNodePtr> particle_light_nodes_;
+	std::vector<KlayGE::Signal::Connection> particle_light_node_update_connections_;
+	std::vector<KlayGE::Signal::Connection> particle_light_update_connections_;
 
 	KlayGE::ParticleSystemPtr ps_;
 };

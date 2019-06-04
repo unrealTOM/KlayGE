@@ -34,13 +34,14 @@
 #pragma once
 
 #include <KlayGE/PreDeclare.hpp>
-#include <KlayGE/RenderLayout.hpp>
 #include <KlayGE/Renderable.hpp>
+#include <KlayGE/RenderLayout.hpp>
+#include <KlayGE/SceneComponent.hpp>
 #include <KlayGE/Signal.hpp>
 
 namespace KlayGE
 {
-	class KLAYGE_CORE_API SceneNode : boost::noncopyable, public std::enable_shared_from_this<SceneNode>
+	class KLAYGE_CORE_API SceneNode final : boost::noncopyable, public std::enable_shared_from_this<SceneNode>
 	{
 	public:
 		enum SOAttrib
@@ -56,9 +57,9 @@ namespace KlayGE
 	public:
 		explicit SceneNode(uint32_t attrib);
 		SceneNode(std::wstring_view name, uint32_t attrib);
-		SceneNode(RenderablePtr const & renderable, uint32_t attrib);
-		SceneNode(RenderablePtr const & renderable, std::wstring_view name, uint32_t attrib);
-		virtual ~SceneNode();
+		SceneNode(SceneComponentPtr const& component, uint32_t attrib);
+		SceneNode(SceneComponentPtr const& component, std::wstring_view name, uint32_t attrib);
+		~SceneNode();
 
 		std::wstring_view Name() const;
 		void Name(std::wstring_view name);
@@ -73,36 +74,86 @@ namespace KlayGE
 		std::vector<SceneNodePtr> const & Children() const;
 		void AddChild(SceneNodePtr const & node);
 		void RemoveChild(SceneNodePtr const & node);
+		void RemoveChild(SceneNode* node);
 		void ClearChildren();
-
-		void MainThreadUpdateSubtree(float app_time, float elapsed_time);
-		void SubThreadUpdateSubtree(float app_time, float elapsed_time);
 
 		void Traverse(std::function<bool(SceneNode&)> const & callback);
 
-		uint32_t NumRenderables() const;
-		RenderablePtr const & GetRenderable() const;
-		RenderablePtr const & GetRenderable(uint32_t i) const;
+		uint32_t NumComponents() const;
+		template <typename T>
+		uint32_t NumComponentsOfType() const
+		{
+			uint32_t ret = 0;
+			this->ForEachComponentOfType<T>([&ret](T& component) {
+				KFL_UNUSED(component);
+				++ret;
+			});
+			return ret;
+		}
+		SceneComponent* FirstComponent();
+		SceneComponent const* FirstComponent() const;
+		SceneComponent* ComponentByIndex(uint32_t i);
+		SceneComponent const* ComponentByIndex(uint32_t i) const;
+		template <typename T>
+		T* FirstComponentOfType()
+		{
+			for (auto const& component : components_)
+			{
+				T* casted = boost::typeindex::runtime_cast<T*>(component.get());
+				if (casted != nullptr)
+				{
+					return casted;
+				}
+			}
+			return nullptr;
+		}
+		template <typename T>
+		T const* FirstComponentOfType() const
+		{
+			for (auto const& component : components_)
+			{
+				T const* casted = boost::typeindex::runtime_cast<T*>(component.get());
+				if (casted != nullptr)
+				{
+					return casted;
+				}
+			}
+			return nullptr;
+		}
 
-		void AddRenderable(RenderablePtr const & renderable);
-		void DelRenderable(RenderablePtr const & renderable);
-		void ClearRenderables();
+		void AddComponent(SceneComponentPtr const& component);
+		void RemoveComponent(SceneComponentPtr const& component);
+		void RemoveComponent(SceneComponent* component);
+		void ClearComponents();
 
-		void ForEachRenderable(std::function<void(Renderable&)> const & callback) const;
+		void ForEachComponent(std::function<void(SceneComponent&)> const & callback) const;
+		template <typename T>
+		void ForEachComponentOfType(std::function<void(T&)> const & callback) const
+		{
+			this->ForEachComponent([&](SceneComponent& component) {
+				T* casted = boost::typeindex::runtime_cast<T*>(&component);
+				if (casted != nullptr)
+				{
+					callback(*casted);
+				}
+			});
+		}
 
-		virtual void TransformToParent(float4x4 const & mat);
-		virtual void TransformToWorld(float4x4 const & mat);
-		virtual float4x4 const & TransformToParent() const;
-		virtual float4x4 const & TransformToWorld() const;
-		virtual AABBox const & PosBoundOS() const;
-		virtual AABBox const & PosBoundWS() const;
+		void TransformToParent(float4x4 const& mat);
+		void TransformToWorld(float4x4 const& mat);
+		float4x4 const& TransformToParent() const;
+		float4x4 const& InverseTransformToParent() const;
+		float4x4 const& TransformToWorld() const;
+		float4x4 const& InverseTransformToWorld() const;
+		AABBox const& PosBoundOS() const;
+		AABBox const& PosBoundWS() const;
 		void UpdateTransforms();
 		void UpdatePosBoundSubtree();
 		bool Updated() const;
 		void VisibleMark(BoundOverlap vm);
 		BoundOverlap VisibleMark() const;
 
-		using UpdateEvent = Signal::Signal<void(float, float)>;
+		using UpdateEvent = Signal::Signal<void(SceneNode&, float, float)>;
 		UpdateEvent& OnSubThreadUpdate()
 		{
 			return sub_thread_update_event_;
@@ -119,16 +170,18 @@ namespace KlayGE
 		bool Visible() const;
 		void Visible(bool vis);
 
+		std::vector<VertexElement>& InstanceFormat();
 		std::vector<VertexElement> const & InstanceFormat() const;
-		virtual void const * InstanceData() const;
+		void InstanceData(void* data);
+		void const * InstanceData() const;
 
 		// For select mode
-		virtual void ObjectID(uint32_t id);
-		virtual void SelectMode(bool select_mode);
+		void ObjectID(uint32_t id);
+		void SelectMode(bool select_mode);
 		bool SelectMode() const;
 
 		// For deferred only
-		virtual void Pass(PassType type);
+		void Pass(PassType type);
 
 		bool TransparencyBackFace() const;
 		bool TransparencyFrontFace() const;
@@ -151,11 +204,14 @@ namespace KlayGE
 		SceneNode* parent_ = nullptr;
 		std::vector<SceneNodePtr> children_;
 
-		std::vector<RenderablePtr> renderables_;
+		std::vector<SceneComponentPtr> components_;
 		std::vector<VertexElement> instance_format_;
+		void* instance_data_;
 
 		float4x4 xform_to_parent_  = float4x4::Identity();
-		float4x4 xform_to_world_ = float4x4::Identity();
+		mutable float4x4 xform_to_world_ = float4x4::Identity();
+		float4x4 inv_xform_to_parent_ = float4x4::Identity();
+		mutable float4x4 inv_xform_to_world_ = float4x4::Identity();
 		std::unique_ptr<AABBox> pos_aabb_os_;
 		std::unique_ptr<AABBox> pos_aabb_ws_;
 		bool pos_aabb_dirty_ = true;

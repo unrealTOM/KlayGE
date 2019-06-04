@@ -88,7 +88,7 @@ namespace
 				{
 					std::get<0>(*srvsrc_) = nullptr;
 				}
-				*srv_ = checked_cast<D3D12ShaderResourceView*>(srv.get())->RetrieveD3DShaderResourceView().get();
+				*srv_ = checked_cast<D3D12ShaderResourceView&>(*srv).RetrieveD3DShaderResourceView().get();
 			}
 			else
 			{
@@ -126,7 +126,7 @@ namespace
 				{
 					std::get<0>(*srvsrc_) = nullptr;
 				}
-				*srv_ = checked_cast<D3D12ShaderResourceView*>(srv.get())->RetrieveD3DShaderResourceView().get();
+				*srv_ = checked_cast<D3D12ShaderResourceView&>(*srv).RetrieveD3DShaderResourceView().get();
 			}
 			else
 			{
@@ -157,7 +157,7 @@ namespace
 			if (uav)
 			{
 				*uavsrc_ = checked_cast<D3D12Texture*>(uav->TextureResource().get());
-				*uav_ = checked_cast<D3D12UnorderedAccessView*>(uav.get())->RetrieveD3DUnorderedAccessView();
+				*uav_ = checked_cast<D3D12UnorderedAccessView&>(*uav).RetrieveD3DUnorderedAccessView();
 			}
 			else
 			{
@@ -188,7 +188,7 @@ namespace
 			if (uav)
 			{
 				*uavsrc_ = checked_cast<D3D12GraphicsBuffer*>(uav->BufferResource().get());
-				*uav_ = checked_cast<D3D12UnorderedAccessView*>(uav.get())->RetrieveD3DUnorderedAccessView();
+				*uav_ = checked_cast<D3D12UnorderedAccessView&>(*uav).RetrieveD3DUnorderedAccessView();
 			}
 			else
 			{
@@ -222,104 +222,100 @@ namespace KlayGE
 		KFL_UNREACHABLE("Couldn't update compute pipeline state for this shader stage.");
 	}
 
-	void D3D12ShaderStageObject::StreamIn(RenderEffect const& effect,
-		std::array<uint32_t, NumShaderStages> const& shader_desc_ids, std::vector<uint8_t> const& native_shader_block)
+	void D3D12ShaderStageObject::StreamIn(
+		RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids, ResIdentifier& res)
 	{
+		uint32_t native_shader_block_len;
+		res.read(&native_shader_block_len, sizeof(native_shader_block_len));
+		native_shader_block_len = LE2Native(native_shader_block_len);
+
 		is_validate_ = false;
 		std::string_view shader_profile = this->GetShaderProfile(effect, shader_desc_ids[static_cast<uint32_t>(stage_)]);
-		if (native_shader_block.size() >= 25 + shader_profile.size())
+		if (native_shader_block_len >= 25 + shader_profile.size())
 		{
-			MemInputStreamBuf native_shader_buff(native_shader_block.data(), native_shader_block.size());
-			std::istream native_shader_stream(&native_shader_buff);
-
 			uint8_t len;
-			native_shader_stream.read(reinterpret_cast<char*>(&len), sizeof(len));
+			res.read(reinterpret_cast<char*>(&len), sizeof(len));
 			std::string& profile = shader_profile_;
 			profile.resize(len);
-			native_shader_stream.read(&profile[0], len);
+			res.read(&profile[0], len);
 			if (profile == shader_profile)
 			{
 				is_validate_ = true;
 
 				uint32_t blob_size;
-				native_shader_stream.read(reinterpret_cast<char*>(&blob_size), sizeof(blob_size));
+				res.read(reinterpret_cast<char*>(&blob_size), sizeof(blob_size));
 				shader_code_.resize(blob_size);
 
-				native_shader_stream.read(reinterpret_cast<char*>(shader_code_.data()), blob_size);
+				res.read(reinterpret_cast<char*>(shader_code_.data()), blob_size);
 
 				uint16_t cb_desc_size;
-				native_shader_stream.read(reinterpret_cast<char*>(&cb_desc_size), sizeof(cb_desc_size));
+				res.read(reinterpret_cast<char*>(&cb_desc_size), sizeof(cb_desc_size));
 				cb_desc_size = LE2Native(cb_desc_size);
 				shader_desc_.cb_desc.resize(cb_desc_size);
 				for (size_t i = 0; i < shader_desc_.cb_desc.size(); ++i)
 				{
-					native_shader_stream.read(reinterpret_cast<char*>(&len), sizeof(len));
+					res.read(reinterpret_cast<char*>(&len), sizeof(len));
 					shader_desc_.cb_desc[i].name.resize(len);
-					native_shader_stream.read(&shader_desc_.cb_desc[i].name[0], len);
+					res.read(&shader_desc_.cb_desc[i].name[0], len);
 
 					shader_desc_.cb_desc[i].name_hash = RT_HASH(shader_desc_.cb_desc[i].name.c_str());
 
-					native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].size), sizeof(shader_desc_.cb_desc[i].size));
+					res.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].size), sizeof(shader_desc_.cb_desc[i].size));
 					shader_desc_.cb_desc[i].size = LE2Native(shader_desc_.cb_desc[i].size);
 
 					uint16_t var_desc_size;
-					native_shader_stream.read(reinterpret_cast<char*>(&var_desc_size), sizeof(var_desc_size));
+					res.read(reinterpret_cast<char*>(&var_desc_size), sizeof(var_desc_size));
 					var_desc_size = LE2Native(var_desc_size);
 					shader_desc_.cb_desc[i].var_desc.resize(var_desc_size);
 					for (size_t j = 0; j < shader_desc_.cb_desc[i].var_desc.size(); ++j)
 					{
-						native_shader_stream.read(reinterpret_cast<char*>(&len), sizeof(len));
+						res.read(reinterpret_cast<char*>(&len), sizeof(len));
 						shader_desc_.cb_desc[i].var_desc[j].name.resize(len);
-						native_shader_stream.read(&shader_desc_.cb_desc[i].var_desc[j].name[0], len);
+						res.read(&shader_desc_.cb_desc[i].var_desc[j].name[0], len);
 
-						native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].var_desc[j].start_offset),
+						res.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].var_desc[j].start_offset),
 							sizeof(shader_desc_.cb_desc[i].var_desc[j].start_offset));
 						shader_desc_.cb_desc[i].var_desc[j].start_offset = LE2Native(shader_desc_.cb_desc[i].var_desc[j].start_offset);
-						native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].var_desc[j].type),
+						res.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].var_desc[j].type),
 							sizeof(shader_desc_.cb_desc[i].var_desc[j].type));
-						native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].var_desc[j].rows),
+						res.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].var_desc[j].rows),
 							sizeof(shader_desc_.cb_desc[i].var_desc[j].rows));
-						native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].var_desc[j].columns),
+						res.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].var_desc[j].columns),
 							sizeof(shader_desc_.cb_desc[i].var_desc[j].columns));
-						native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].var_desc[j].elements),
+						res.read(reinterpret_cast<char*>(&shader_desc_.cb_desc[i].var_desc[j].elements),
 							sizeof(shader_desc_.cb_desc[i].var_desc[j].elements));
 						shader_desc_.cb_desc[i].var_desc[j].elements = LE2Native(shader_desc_.cb_desc[i].var_desc[j].elements);
 					}
 				}
 
-				native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.num_samplers), sizeof(shader_desc_.num_samplers));
+				res.read(reinterpret_cast<char*>(&shader_desc_.num_samplers), sizeof(shader_desc_.num_samplers));
 				shader_desc_.num_samplers = LE2Native(shader_desc_.num_samplers);
-				native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.num_srvs), sizeof(shader_desc_.num_srvs));
+				res.read(reinterpret_cast<char*>(&shader_desc_.num_srvs), sizeof(shader_desc_.num_srvs));
 				shader_desc_.num_srvs = LE2Native(shader_desc_.num_srvs);
-				native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.num_uavs), sizeof(shader_desc_.num_uavs));
+				res.read(reinterpret_cast<char*>(&shader_desc_.num_uavs), sizeof(shader_desc_.num_uavs));
 				shader_desc_.num_uavs = LE2Native(shader_desc_.num_uavs);
 
 				uint16_t res_desc_size;
-				native_shader_stream.read(reinterpret_cast<char*>(&res_desc_size), sizeof(res_desc_size));
+				res.read(reinterpret_cast<char*>(&res_desc_size), sizeof(res_desc_size));
 				res_desc_size = LE2Native(res_desc_size);
 				shader_desc_.res_desc.resize(res_desc_size);
 				for (size_t i = 0; i < shader_desc_.res_desc.size(); ++i)
 				{
-					native_shader_stream.read(reinterpret_cast<char*>(&len), sizeof(len));
+					res.read(reinterpret_cast<char*>(&len), sizeof(len));
 					shader_desc_.res_desc[i].name.resize(len);
-					native_shader_stream.read(&shader_desc_.res_desc[i].name[0], len);
+					res.read(&shader_desc_.res_desc[i].name[0], len);
 
-					native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.res_desc[i].type),
-						sizeof(shader_desc_.res_desc[i].type));
+					res.read(reinterpret_cast<char*>(&shader_desc_.res_desc[i].type), sizeof(shader_desc_.res_desc[i].type));
 
-					native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.res_desc[i].dimension),
-						sizeof(shader_desc_.res_desc[i].dimension));
+					res.read(reinterpret_cast<char*>(&shader_desc_.res_desc[i].dimension), sizeof(shader_desc_.res_desc[i].dimension));
 
-					native_shader_stream.read(reinterpret_cast<char*>(&shader_desc_.res_desc[i].bind_point),
-						sizeof(shader_desc_.res_desc[i].bind_point));
+					res.read(reinterpret_cast<char*>(&shader_desc_.res_desc[i].bind_point), sizeof(shader_desc_.res_desc[i].bind_point));
 					shader_desc_.res_desc[i].bind_point = LE2Native(shader_desc_.res_desc[i].bind_point);
 				}
 
 				this->FillCBufferIndices(effect);
 
-				this->StageSpecificStreamIn(native_shader_stream);
-
-				this->CreateHwShader(effect, shader_desc_ids);
+				this->StageSpecificStreamIn(res);
 			}
 		}
 	}
@@ -411,7 +407,7 @@ namespace KlayGE
 		}
 	}
 
-	void D3D12ShaderStageObject::AttachShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
+	void D3D12ShaderStageObject::CompileShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
 		std::array<uint32_t, NumShaderStages> const& shader_desc_ids)
 	{
 		shader_code_.clear();
@@ -576,8 +572,6 @@ namespace KlayGE
 		KFL_UNUSED(pass);
 		KFL_UNUSED(shader_desc_ids);
 #endif
-
-		this->CreateHwShader(effect, shader_desc_ids);
 	}
 	
 	void D3D12ShaderStageObject::CreateHwShader(
@@ -605,6 +599,8 @@ namespace KlayGE
 		{
 			is_validate_ = false;
 		}
+
+		hw_res_ready_ = true;
 	}
 
 	void D3D12ShaderStageObject::FillCBufferIndices(RenderEffect const& effect)
@@ -635,8 +631,7 @@ namespace KlayGE
 		{
 			if (shader_profile == "auto")
 			{
-				auto const& re =
-					*checked_cast<D3D12RenderEngine const*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+				auto const& re = checked_cast<D3D12RenderEngine const&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 				shader_profile = re.DefaultShaderProfile(stage_);
 			}
 		}
@@ -658,11 +653,14 @@ namespace KlayGE
 		pso_desc.VS.pShaderBytecode = shader_code_.data();
 		pso_desc.VS.BytecodeLength = static_cast<UINT>(shader_code_.size());
 
-		pso_desc.StreamOutput.pSODeclaration = so_decl_.data();
-		pso_desc.StreamOutput.NumEntries = static_cast<UINT>(so_decl_.size());
-		pso_desc.StreamOutput.pBufferStrides = nullptr;
-		pso_desc.StreamOutput.NumStrides = 0;
-		pso_desc.StreamOutput.RasterizedStream = rasterized_stream_;
+		if (pso_desc.StreamOutput.pSODeclaration == nullptr)
+		{
+			pso_desc.StreamOutput.pSODeclaration = so_decl_.data();
+			pso_desc.StreamOutput.NumEntries = static_cast<UINT>(so_decl_.size());
+			pso_desc.StreamOutput.pBufferStrides = nullptr;
+			pso_desc.StreamOutput.NumStrides = 0;
+			pso_desc.StreamOutput.RasterizedStream = rasterized_stream_;
+		}
 	}
 
 	void D3D12VertexShaderStageObject::StageSpecificCreateHwShader(
@@ -712,11 +710,14 @@ namespace KlayGE
 		pso_desc.GS.pShaderBytecode = shader_code_.data();
 		pso_desc.GS.BytecodeLength = static_cast<UINT>(shader_code_.size());
 
-		pso_desc.StreamOutput.pSODeclaration = so_decl_.data();
-		pso_desc.StreamOutput.NumEntries = static_cast<UINT>(so_decl_.size());
-		pso_desc.StreamOutput.pBufferStrides = nullptr;
-		pso_desc.StreamOutput.NumStrides = 0;
-		pso_desc.StreamOutput.RasterizedStream = rasterized_stream_;
+		if (pso_desc.StreamOutput.pSODeclaration == nullptr)
+		{
+			pso_desc.StreamOutput.pSODeclaration = so_decl_.data();
+			pso_desc.StreamOutput.NumEntries = static_cast<UINT>(so_decl_.size());
+			pso_desc.StreamOutput.pBufferStrides = nullptr;
+			pso_desc.StreamOutput.NumStrides = 0;
+			pso_desc.StreamOutput.RasterizedStream = rasterized_stream_;
+		}
 	}
 
 	void D3D12GeometryShaderStageObject::StageSpecificCreateHwShader(
@@ -769,15 +770,15 @@ namespace KlayGE
 		}
 	}
 
-	void D3D12ComputeShaderStageObject::StageSpecificStreamIn(std::istream& native_shader_stream)
+	void D3D12ComputeShaderStageObject::StageSpecificStreamIn(ResIdentifier& res)
 	{
-		native_shader_stream.read(reinterpret_cast<char*>(&block_size_x_), sizeof(block_size_x_));
+		res.read(reinterpret_cast<char*>(&block_size_x_), sizeof(block_size_x_));
 		block_size_x_ = LE2Native(block_size_x_);
 
-		native_shader_stream.read(reinterpret_cast<char*>(&block_size_y_), sizeof(block_size_y_));
+		res.read(reinterpret_cast<char*>(&block_size_y_), sizeof(block_size_y_));
 		block_size_y_ = LE2Native(block_size_y_);
 
-		native_shader_stream.read(reinterpret_cast<char*>(&block_size_z_), sizeof(block_size_z_));
+		res.read(reinterpret_cast<char*>(&block_size_z_), sizeof(block_size_z_));
 		block_size_z_ = LE2Native(block_size_z_);
 	}
 
@@ -839,11 +840,14 @@ namespace KlayGE
 		pso_desc.DS.pShaderBytecode = shader_code_.data();
 		pso_desc.DS.BytecodeLength = static_cast<UINT>(shader_code_.size());
 
-		pso_desc.StreamOutput.pSODeclaration = so_decl_.data();
-		pso_desc.StreamOutput.NumEntries = static_cast<UINT>(so_decl_.size());
-		pso_desc.StreamOutput.pBufferStrides = nullptr;
-		pso_desc.StreamOutput.NumStrides = 0;
-		pso_desc.StreamOutput.RasterizedStream = rasterized_stream_;
+		if (pso_desc.StreamOutput.pSODeclaration == nullptr)
+		{
+			pso_desc.StreamOutput.pSODeclaration = so_decl_.data();
+			pso_desc.StreamOutput.NumEntries = static_cast<UINT>(so_decl_.size());
+			pso_desc.StreamOutput.pBufferStrides = nullptr;
+			pso_desc.StreamOutput.NumStrides = 0;
+			pso_desc.StreamOutput.RasterizedStream = rasterized_stream_;
+		}
 	}
 
 	void D3D12DomainShaderStageObject::StageSpecificCreateHwShader(
@@ -854,8 +858,7 @@ namespace KlayGE
 			auto const& sd = effect.GetShaderDesc(shader_desc_ids[static_cast<uint32_t>(stage_)]);
 			if (!sd.so_decl.empty())
 			{
-				auto const& re =
-					*checked_cast<D3D12RenderEngine const*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+				auto const& re = checked_cast<D3D12RenderEngine const&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 				auto const& caps = re.DeviceCaps();
 				if (caps.gs_support)
 				{
@@ -897,10 +900,10 @@ namespace KlayGE
 
 	void D3D12ShaderObject::CreateHwResources(ShaderStage stage, RenderEffect const& effect)
 	{
-		auto* shader_stage = checked_cast<D3D12ShaderStageObject*>(this->Stage(stage).get());
-		if (!shader_stage->ShaderCodeBlob().empty())
+		auto& shader_stage = checked_cast<D3D12ShaderStageObject&>(*this->Stage(stage));
+		if (!shader_stage.ShaderCodeBlob().empty())
 		{
-			auto const & shader_desc = shader_stage->GetD3D12ShaderDesc();
+			auto const & shader_desc = shader_stage.GetD3D12ShaderDesc();
 
 			uint32_t const stage_idnex = static_cast<uint32_t>(stage);
 
@@ -923,7 +926,7 @@ namespace KlayGE
 					p->Value(sampler);
 					if (sampler)
 					{
-						samplers_[stage_idnex][offset] = checked_cast<D3D12SamplerStateObject*>(sampler.get())->D3DDesc();
+						samplers_[stage_idnex][offset] = checked_cast<D3D12SamplerStateObject&>(*sampler).D3DDesc();
 					}
 				}
 				else
@@ -1007,7 +1010,7 @@ namespace KlayGE
 
 	void D3D12ShaderObject::CreateRootSignature()
 	{
-		D3D12RenderEngine& re = *checked_cast<D3D12RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<D3D12RenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		ID3D12Device* device = re.D3DDevice();
 
 		std::array<uint32_t, NumShaderStages * 4> num;
@@ -1024,17 +1027,17 @@ namespace KlayGE
 
 		bool has_stream_output = false;
 		if (this->Stage(ShaderStage::Geometry) &&
-			checked_cast<D3D12ShaderStageObject*>(this->Stage(ShaderStage::Geometry).get())->HasStreamOutput())
+			checked_cast<D3D12ShaderStageObject&>(*this->Stage(ShaderStage::Geometry)).HasStreamOutput())
 		{
 			has_stream_output = true;
 		}
 		else if (this->Stage(ShaderStage::Domain) &&
-				 checked_cast<D3D12ShaderStageObject*>(this->Stage(ShaderStage::Domain).get())->HasStreamOutput())
+				 checked_cast<D3D12ShaderStageObject&>(*this->Stage(ShaderStage::Domain)).HasStreamOutput())
 		{
 			has_stream_output = true;
 		}
 		else if (this->Stage(ShaderStage::Vertex) &&
-				 checked_cast<D3D12ShaderStageObject*>(this->Stage(ShaderStage::Vertex).get())->HasStreamOutput())
+				 checked_cast<D3D12ShaderStageObject&>(*this->Stage(ShaderStage::Vertex)).HasStreamOutput())
 		{
 			has_stream_output = true;
 		}
@@ -1073,6 +1076,7 @@ namespace KlayGE
 		D3D12ShaderObjectPtr ret = MakeSharedPtr<D3D12ShaderObject>(so_template_, d3d_so_template_);
 
 		ret->is_validate_ = is_validate_;
+		ret->hw_res_ready_ = hw_res_ready_;
 
 		std::vector<uint32_t> all_cbuff_indices;
 		for (size_t i = 0; i < NumShaderStages; ++ i)
@@ -1199,7 +1203,7 @@ namespace KlayGE
 
 	void D3D12ShaderObject::Bind()
 	{
-		auto& re = *checked_cast<D3D12RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<D3D12RenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		auto* cmd_list = re.D3DRenderCmdList();
 
 		for (size_t stage = 0; stage < NumShaderStages; ++stage)
@@ -1255,6 +1259,12 @@ namespace KlayGE
 	void D3D12ShaderObject::UpdatePsoDesc(D3D12_GRAPHICS_PIPELINE_STATE_DESC& pso_desc)
 	{
 		pso_desc.pRootSignature = d3d_so_template_->root_signature_.get();
+
+		pso_desc.StreamOutput.pSODeclaration = nullptr;
+		pso_desc.StreamOutput.NumEntries = 0;
+		pso_desc.StreamOutput.pBufferStrides = nullptr;
+		pso_desc.StreamOutput.NumStrides = 0;
+		pso_desc.StreamOutput.RasterizedStream = 0;
 
 		{
 			auto const* ps_stage = checked_cast<D3D12ShaderStageObject*>(this->Stage(ShaderStage::Pixel).get());

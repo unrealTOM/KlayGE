@@ -97,17 +97,23 @@ void FoliageApp::OnCreate()
 	deferred_rendering_ = Context::Instance().DeferredRenderingLayerInstance();
 	deferred_rendering_->SSVOEnabled(0, false);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	auto ambient_light = MakeSharedPtr<AmbientLightSource>();
 	ambient_light->SkylightTex(y_cube, c_cube);
 	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
-	ambient_light->AddToSceneManager();
+	root_node.AddComponent(ambient_light);
 
+	auto sun_light_node = MakeSharedPtr<SceneNode>(0);
 	sun_light_ = MakeSharedPtr<DirectionalLightSource>();
 	sun_light_->Attrib(LightSource::LSA_NoShadow);
-	sun_light_->Direction(float3(0.267835f, -0.0517653f, -0.960315f));
 	sun_light_->Color(float3(3, 3, 3));
-	sun_light_->AddToSceneManager();
-	
+	sun_light_node->TransformToParent(
+		MathLib::to_matrix(MathLib::axis_to_axis(float3(0, 0, 1), float3(0.267835f, -0.0517653f, -0.960315f))));
+	sun_light_node->AddComponent(sun_light_);
+	sun_light_node->AddComponent(MakeSharedPtr<LensFlareRenderableComponent>());
+	root_node.AddChild(sun_light_node);
+
 	Color fog_color(0.61f, 0.52f, 0.62f, 1);
 	if (Context::Instance().Config().graphics_cfg.gamma)
 	{
@@ -117,7 +123,6 @@ void FoliageApp::OnCreate()
 	}
 
 	auto terrain_renderable = MakeSharedPtr<ProceduralTerrain>();
-	terrain_ = MakeSharedPtr<HQTerrainSceneObject>(terrain_renderable);
 	terrain_renderable->TextureLayer(0, ASyncLoadTexture("RealSand40BoH.dds", EAH_GPU_Read | EAH_Immutable));
 	terrain_renderable->TextureLayer(1, ASyncLoadTexture("snow_DM.dds", EAH_GPU_Read | EAH_Immutable));
 	terrain_renderable->TextureLayer(2, ASyncLoadTexture("GrassGreenTexture0002.dds", EAH_GPU_Read | EAH_Immutable));
@@ -126,16 +131,15 @@ void FoliageApp::OnCreate()
 	terrain_renderable->TextureScale(1, float2(1, 1));
 	terrain_renderable->TextureScale(2, float2(3, 3));
 	terrain_renderable->TextureScale(3, float2(11, 11));
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(terrain_);
+	terrain_renderable_ = terrain_renderable;
+	auto terrain_node =
+		MakeSharedPtr<SceneNode>(MakeSharedPtr<HQTerrainRenderableComponent>(terrain_renderable), L"TerrainNode", SceneNode::SOA_Moveable);
+	root_node.AddChild(terrain_node);
 
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableFoggySkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableFoggySkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube, c_cube);
-	checked_pointer_cast<RenderableFoggySkyBox>(sky_box_->GetRenderable())->FogColor(fog_color);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
-
-	sun_flare_ = MakeSharedPtr<LensFlareSceneObject>();
-	checked_pointer_cast<LensFlareSceneObject>(sun_flare_)->Direction(float3(-0.267835f, 0.0517653f, 0.960315f));
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sun_flare_);
+	auto skybox = MakeSharedPtr<RenderableFoggySkyBox>();
+	skybox->CompressedCubeMap(y_cube, c_cube);
+	skybox->FogColor(fog_color);
+	root_node.AddChild(MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableComponent>(skybox), SceneNode::SOA_NotCastShadow));
 
 	fog_pp_ = SyncLoadPostProcess("Fog.ppml", "fog");
 	fog_pp_->SetParam(1, float3(fog_color.r(), fog_color.g(), fog_color.b()));
@@ -233,11 +237,12 @@ void FoliageApp::DoUpdateOverlay()
 		<< deferred_rendering_->NumVerticesRendered() << " Vertices";
 	font_->RenderText(0, 36, Color(1, 1, 1, 1), stream.str(), 16);
 
-	if (!checked_cast<ProceduralTerrain*>(terrain_->GetRenderable().get())->UseDrawIndirect())
+	auto& terrain_renderable = checked_cast<ProceduralTerrain&>(*terrain_renderable_);
+	if (!terrain_renderable.UseDrawIndirect())
 	{
 		stream.str(L"");
-		stream << checked_cast<ProceduralTerrain*>(terrain_->GetRenderable().get())->Num3DPlants() << " 3D plants "
-			<< checked_cast<ProceduralTerrain*>(terrain_->GetRenderable().get())->NumImpostorPlants() << " impostor plants";
+		stream << terrain_renderable.Num3DPlants() << " 3D plants "
+			<< terrain_renderable.NumImpostorPlants() << " impostor plants";
 		font_->RenderText(0, 54, Color(1, 1, 1, 1), stream.str(), 16);
 	}
 }

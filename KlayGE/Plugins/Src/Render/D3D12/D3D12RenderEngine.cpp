@@ -149,7 +149,7 @@ namespace KlayGE
 	{
 		RenderEngine::EndFrame();
 
-		render_cmd_fence_val_ = checked_cast<D3D12Fence*>(render_cmd_fence_.get())->Signal(d3d_render_cmd_queue_.get());
+		render_cmd_fence_val_ = checked_cast<D3D12Fence&>(*render_cmd_fence_).Signal(d3d_render_cmd_queue_.get());
 		this->RecycleCmdAllocator(curr_render_cmd_allocator_, render_cmd_fence_val_);
 		curr_render_cmd_allocator_ = this->AllocCmdAllocator();
 
@@ -461,7 +461,7 @@ namespace KlayGE
 
 	void D3D12RenderEngine::SyncRenderCmd()
 	{
-		render_cmd_fence_val_ = checked_cast<D3D12Fence*>(render_cmd_fence_.get())->Signal(d3d_render_cmd_queue_.get());
+		render_cmd_fence_val_ = checked_cast<D3D12Fence&>(*render_cmd_fence_).Signal(d3d_render_cmd_queue_.get());
 		render_cmd_fence_->Wait(render_cmd_fence_val_);
 	}
 
@@ -568,8 +568,8 @@ namespace KlayGE
 	void D3D12RenderEngine::UpdateRenderPSO(RenderEffect const & effect, RenderPass const & pass, RenderLayout const & rl,
 		bool has_tessellation)
 	{
-		auto const & so = *checked_cast<D3D12ShaderObject const *>(pass.GetShaderObject(effect).get());
-		auto const & rso = *checked_cast<D3D12RenderStateObject const *>(pass.GetRenderStateObject().get());
+		auto const& so = checked_cast<D3D12ShaderObject const&>(*pass.GetShaderObject(effect));
+		auto const& rso = checked_cast<D3D12RenderStateObject const&>(*pass.GetRenderStateObject());
 
 		auto pso = rso.RetrieveGraphicsPSO(rl, so, *this->CurFrameBuffer(), has_tessellation);
 		this->SetPipelineState(pso);
@@ -599,8 +599,8 @@ namespace KlayGE
 
 	void D3D12RenderEngine::UpdateComputePSO(RenderEffect const & effect, RenderPass const & pass)
 	{
-		auto const & so = *checked_cast<D3D12ShaderObject const *>(pass.GetShaderObject(effect).get());
-		auto const & rso = *checked_cast<D3D12RenderStateObject const *>(pass.GetRenderStateObject().get());
+		auto const& so = checked_cast<D3D12ShaderObject const&>(*pass.GetShaderObject(effect));
+		auto const& rso = checked_cast<D3D12RenderStateObject const&>(*pass.GetRenderStateObject());
 
 		auto pso = rso.RetrieveComputePSO(so);
 		this->SetPipelineState(pso);
@@ -613,7 +613,7 @@ namespace KlayGE
 
 	void D3D12RenderEngine::UpdateCbvSrvUavSamplerHeaps(ShaderObject const & so)
 	{
-		auto const & d3d12_so = *checked_cast<D3D12ShaderObject const *>(&so);
+		auto const& d3d12_so = checked_cast<D3D12ShaderObject const&>(so);
 
 		uint32_t const num_handles = d3d12_so.NumHandles();
 
@@ -678,7 +678,7 @@ namespace KlayGE
 					D3D12_GPU_VIRTUAL_ADDRESS gpu_vaddr;
 					if (cbuffer != nullptr)
 					{
-						gpu_vaddr = checked_cast<D3D12GraphicsBuffer*>(cbuffer)->GPUVirtualAddress();
+						gpu_vaddr = checked_cast<D3D12GraphicsBuffer&>(*cbuffer).GPUVirtualAddress();
 					}
 					else
 					{
@@ -813,12 +813,12 @@ namespace KlayGE
 	/////////////////////////////////////////////////////////////////////////////////
 	void D3D12RenderEngine::DoRender(RenderEffect const & effect, RenderTechnique const & tech, RenderLayout const & rl)
 	{
-		D3D12FrameBuffer& fb = *checked_cast<D3D12FrameBuffer*>(this->CurFrameBuffer().get());
+		auto& fb = checked_cast<D3D12FrameBuffer&>(*this->CurFrameBuffer());
 		fb.BindBarrier();
 
 		for (uint32_t i = 0; i < so_buffs_.size(); ++ i)
 		{
-			D3D12GraphicsBuffer& d3dvb = *checked_cast<D3D12GraphicsBuffer*>(so_buffs_[i].get());
+			auto& d3dvb = checked_cast<D3D12GraphicsBuffer&>(*so_buffs_[i]);
 			d3dvb.UpdateResourceBarrier(d3d_render_cmd_list_.get(), 0, D3D12_RESOURCE_STATE_STREAM_OUT);
 		}
 
@@ -826,9 +826,7 @@ namespace KlayGE
 
 		for (uint32_t i = 0; i < num_vertex_streams; ++ i)
 		{
-			GraphicsBufferPtr const & stream = rl.GetVertexStream(i);
-
-			D3D12GraphicsBuffer& d3dvb = *checked_cast<D3D12GraphicsBuffer*>(stream.get());
+			auto& d3dvb = checked_cast<D3D12GraphicsBuffer&>(*rl.GetVertexStream(i));
 			if (!(d3dvb.AccessHint() & (EAH_CPU_Read | EAH_CPU_Write)))
 			{
 				d3dvb.UpdateResourceBarrier(d3d_render_cmd_list_.get(), 0, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
@@ -836,9 +834,7 @@ namespace KlayGE
 		}
 		if (rl.InstanceStream())
 		{
-			GraphicsBufferPtr const & stream = rl.InstanceStream();
-
-			D3D12GraphicsBuffer& d3dvb = *checked_cast<D3D12GraphicsBuffer*>(stream.get());
+			auto& d3dvb = checked_cast<D3D12GraphicsBuffer&>(*rl.InstanceStream().get());
 			if (!(d3dvb.AccessHint() & (EAH_CPU_Read | EAH_CPU_Write)))
 			{
 				d3dvb.UpdateResourceBarrier(d3d_render_cmd_list_.get(), 0, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
@@ -847,7 +843,7 @@ namespace KlayGE
 
 		if (rl.UseIndices())
 		{
-			D3D12GraphicsBuffer& ib = *checked_cast<D3D12GraphicsBuffer*>(rl.GetIndexStream().get());
+			auto& ib = checked_cast<D3D12GraphicsBuffer&>(*rl.GetIndexStream());
 			if (!(ib.AccessHint() & (EAH_CPU_Read | EAH_CPU_Write)))
 			{
 				ib.UpdateResourceBarrier(d3d_render_cmd_list_.get(), 0, D3D12_RESOURCE_STATE_INDEX_BUFFER);
@@ -856,7 +852,7 @@ namespace KlayGE
 
 		if (rl.GetIndirectArgs())
 		{
-			auto& arg_buff = *checked_cast<D3D12GraphicsBuffer*>(rl.GetIndirectArgs().get());
+			auto& arg_buff = checked_cast<D3D12GraphicsBuffer&>(*rl.GetIndirectArgs());
 			if (!(arg_buff.AccessHint() & (EAH_CPU_Read | EAH_CPU_Write)))
 			{
 				arg_buff.UpdateResourceBarrier(d3d_render_cmd_list_.get(), 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
@@ -865,7 +861,7 @@ namespace KlayGE
 
 		this->FlushResourceBarriers(d3d_render_cmd_list_.get());
 
-		checked_cast<D3D12RenderLayout const *>(&rl)->Active();
+		checked_cast<D3D12RenderLayout const&>(rl).Active();
 
 		uint32_t const vertex_count = static_cast<uint32_t>(rl.UseIndices() ? rl.NumIndices() : rl.NumVertices());
 
@@ -942,7 +938,7 @@ namespace KlayGE
 		GraphicsBufferPtr const & indirect_buff = rl.GetIndirectArgs();
 		if (indirect_buff)
 		{
-			auto* arg_buff = checked_cast<D3D12GraphicsBuffer const *>(indirect_buff.get())->D3DResource().get();
+			auto* arg_buff = checked_cast<D3D12GraphicsBuffer const&>(*indirect_buff).D3DResource().get();
 
 			if (rl.UseIndices())
 			{
@@ -1026,7 +1022,7 @@ namespace KlayGE
 	void D3D12RenderEngine::DoDispatchIndirect(RenderEffect const & effect, RenderTechnique const & tech,
 		GraphicsBufferPtr const & buff_args, uint32_t offset)
 	{
-		auto& arg_buff = *checked_cast<D3D12GraphicsBuffer*>(buff_args.get());
+		auto& arg_buff = checked_cast<D3D12GraphicsBuffer&>(*buff_args);
 		if (!(arg_buff.AccessHint() & (EAH_CPU_Read | EAH_CPU_Write)))
 		{
 			arg_buff.UpdateResourceBarrier(d3d_render_cmd_list_.get(), 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
@@ -1041,8 +1037,7 @@ namespace KlayGE
 
 			pass.Bind(effect);
 			this->UpdateComputePSO(effect, pass);
-			d3d_render_cmd_list_->ExecuteIndirect(dispatch_indirect_signature_.get(), 1,
-				checked_cast<D3D12GraphicsBuffer*>(buff_args.get())->D3DResource().get(), offset, nullptr, 0);
+			d3d_render_cmd_list_->ExecuteIndirect(dispatch_indirect_signature_.get(), 1, arg_buff.D3DResource().get(), offset, nullptr, 0);
 			pass.Unbind(effect);
 		}
 
@@ -1068,7 +1063,7 @@ namespace KlayGE
 
 	TexturePtr const & D3D12RenderEngine::ScreenDepthStencilTexture() const
 	{
-		return checked_cast<D3D12RenderWindow*>(screen_frame_buffer_.get())->D3DDepthStencilBuffer();
+		return checked_cast<D3D12RenderWindow&>(*screen_frame_buffer_).D3DDepthStencilBuffer();
 	}
 
 	// 设置剪除矩阵
@@ -1083,19 +1078,22 @@ namespace KlayGE
 
 	void D3D12RenderEngine::DoResize(uint32_t width, uint32_t height)
 	{
-		checked_cast<D3D12RenderWindow*>(screen_frame_buffer_.get())->Resize(width, height);
+		checked_cast<D3D12RenderWindow&>(*screen_frame_buffer_).Resize(width, height);
 	}
 
 	void D3D12RenderEngine::DoDestroy()
 	{
 		adapterList_.Destroy();
 
-		uint64_t max_fence_val = 0;
-		for (auto const & item : d3d_render_cmd_allocators_)
+		if (render_cmd_fence_)
 		{
-			max_fence_val = std::max(max_fence_val, item.second);
+			uint64_t max_fence_val = 0;
+			for (auto const& item : d3d_render_cmd_allocators_)
+			{
+				max_fence_val = std::max(max_fence_val, item.second);
+			}
+			render_cmd_fence_->Wait(max_fence_val);
 		}
-		render_cmd_fence_->Wait(max_fence_val);
 
 		res_cmd_fence_.reset();
 		render_cmd_fence_.reset();
@@ -1154,12 +1152,12 @@ namespace KlayGE
 
 	bool D3D12RenderEngine::FullScreen() const
 	{
-		return checked_cast<D3D12RenderWindow*>(screen_frame_buffer_.get())->FullScreen();
+		return checked_cast<D3D12RenderWindow&>(*screen_frame_buffer_).FullScreen();
 	}
 
 	void D3D12RenderEngine::FullScreen(bool fs)
 	{
-		checked_cast<D3D12RenderWindow*>(screen_frame_buffer_.get())->FullScreen(fs);
+		checked_cast<D3D12RenderWindow&>(*screen_frame_buffer_).FullScreen(fs);
 	}
 
 	// 填充设备能力
@@ -1456,10 +1454,9 @@ namespace KlayGE
 		{
 		case SM_DXGI:
 			{
-				D3D12RenderTargetView* rtv = checked_cast<D3D12RenderTargetView*>(
-					(0 == eye) ? win->D3DBackBufferRtv().get() : win->D3DBackBufferRightEyeRtv().get());
+				auto& rtv = checked_cast<D3D12RenderTargetView&>((0 == eye) ? *win->D3DBackBufferRtv() : *win->D3DBackBufferRightEyeRtv());
 
-				D3D12_CPU_DESCRIPTOR_HANDLE rt_handle = rtv->RetrieveD3DRenderTargetView()->Handle();
+				D3D12_CPU_DESCRIPTOR_HANDLE rt_handle = rtv.RetrieveD3DRenderTargetView()->Handle();
 				d3d_render_cmd_list_->OMSetRenderTargets(1, &rt_handle, false, nullptr);
 
 				D3D12_VIEWPORT vp;

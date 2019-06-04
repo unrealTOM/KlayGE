@@ -58,11 +58,13 @@ namespace KlayGE
 		explicit OGLShaderStageObject(ShaderStage stage);
 		~OGLShaderStageObject() override;
 		
-		void StreamIn(RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids,
-			std::vector<uint8_t> const& native_shader_block) override;
+		void StreamIn(
+			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids, ResIdentifier& res) override;
 		void StreamOut(std::ostream& os) override;
-		void AttachShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
+		void CompileShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
 			std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override;
+		void CreateHwShader(
+			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override;
 		
 		std::string const& GlslSource() const
 		{
@@ -117,8 +119,6 @@ namespace KlayGE
 
 	private:
 		std::string_view GetShaderProfile(RenderEffect const& effect, uint32_t shader_desc_id) const override;
-		void CreateHwShader(
-			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override;
 
 		virtual void StageSpecificAttachShader(DXBC2GLSL::DXBC2GLSL const& dxbc2glsl)
 		{
@@ -171,7 +171,7 @@ namespace KlayGE
 		}
 
 	private:
-		void StageSpecificStreamIn(std::istream& native_shader_stream) override;
+		void StageSpecificStreamIn(ResIdentifier& res) override;
 		void StageSpecificStreamOut(std::ostream& os) override;
 		void StageSpecificAttachShader(DXBC2GLSL::DXBC2GLSL const& dxbc2glsl) override;
 		void StageSpecificCreateHwShader(RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids);
@@ -206,7 +206,7 @@ namespace KlayGE
 		}
 
 	private:
-		void StageSpecificStreamIn(std::istream& native_shader_stream) override;
+		void StageSpecificStreamIn(ResIdentifier& res) override;
 		void StageSpecificStreamOut(std::ostream& os) override;
 		void StageSpecificAttachShader(DXBC2GLSL::DXBC2GLSL const& dxbc2glsl) override;
 		void StageSpecificCreateHwShader(RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids);

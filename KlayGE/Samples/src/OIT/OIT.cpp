@@ -138,27 +138,23 @@ namespace
 			}
 
 			*(no_oit_effect_->ParameterByName("albedo_clr")) = mtl_->albedo;
-			*(no_oit_effect_->ParameterByName("metalness_clr")) = float2(mtl_->metalness,
-				textures_[RenderMaterial::TS_Metalness].get() ? 1.0f : 0.0f);
-			*(no_oit_effect_->ParameterByName("glossiness_clr")) = float2(mtl_->glossiness,
-				textures_[RenderMaterial::TS_Glossiness].get() ? 1.0f : 0.0f);
-			*(no_oit_effect_->ParameterByName("emissive_clr")) = float4(mtl_->emissive.x(), mtl_->emissive.y(), mtl_->emissive.z(),
+			*(no_oit_effect_->ParameterByName("metalness_glossiness_factor")) =
+				float3(mtl_->metalness, mtl_->glossiness, textures_[RenderMaterial::TS_MetalnessGlossiness].get() ? 1.0f : 0.0f);
+			*(no_oit_effect_->ParameterByName("emissive_clr")) = float4(
+				mtl_->emissive.x(), mtl_->emissive.y(), mtl_->emissive.z(),
 				textures_[RenderMaterial::TS_Emissive].get() ? 1.0f : 0.0f);
 			*(no_oit_effect_->ParameterByName("albedo_map_enabled"))
 				= static_cast<int32_t>(textures_[RenderMaterial::TS_Albedo].get() ? 1 : 0);
 			*(no_oit_effect_->ParameterByName("normal_map_enabled"))
 				= static_cast<int32_t>(textures_[RenderMaterial::TS_Normal].get() ? 1 : 0);
 			*(no_oit_effect_->ParameterByName("albedo_tex")) = textures_[RenderMaterial::TS_Albedo];
-			*(no_oit_effect_->ParameterByName("metalness_tex")) = textures_[RenderMaterial::TS_Metalness];
-			*(no_oit_effect_->ParameterByName("glossiness_tex")) = textures_[RenderMaterial::TS_Glossiness];
+			*(no_oit_effect_->ParameterByName("metalness_glossiness_tex")) = textures_[RenderMaterial::TS_MetalnessGlossiness];
 			*(no_oit_effect_->ParameterByName("emissive_tex")) = textures_[RenderMaterial::TS_Emissive];
 			*(no_oit_effect_->ParameterByName("normal_tex")) = textures_[RenderMaterial::TS_Normal];
 
 			*(dp_effect_->ParameterByName("albedo_clr")) = mtl_->albedo;
-			*(dp_effect_->ParameterByName("metalness_clr")) = float2(mtl_->metalness,
-				textures_[RenderMaterial::TS_Metalness].get() ? 1.0f : 0.0f);
-			*(dp_effect_->ParameterByName("glossiness_clr")) = float2(mtl_->glossiness,
-				textures_[RenderMaterial::TS_Glossiness].get() ? 1.0f : 0.0f);
+			*(dp_effect_->ParameterByName("metalness_glossiness_factor")) =
+				float3(mtl_->metalness, mtl_->glossiness, textures_[RenderMaterial::TS_MetalnessGlossiness].get() ? 1.0f : 0.0f);
 			*(dp_effect_->ParameterByName("emissive_clr")) = float4(mtl_->emissive.x(), mtl_->emissive.y(), mtl_->emissive.z(),
 				textures_[RenderMaterial::TS_Emissive].get() ? 1.0f : 0.0f);
 			*(dp_effect_->ParameterByName("albedo_map_enabled")) 
@@ -166,16 +162,13 @@ namespace
 			*(dp_effect_->ParameterByName("normal_map_enabled"))
 				= static_cast<int32_t>(textures_[RenderMaterial::TS_Normal].get() ? 1 : 0);
 			*(dp_effect_->ParameterByName("albedo_tex")) = textures_[RenderMaterial::TS_Albedo];
-			*(dp_effect_->ParameterByName("metalness_tex")) = textures_[RenderMaterial::TS_Metalness];
-			*(dp_effect_->ParameterByName("glossiness_tex")) = textures_[RenderMaterial::TS_Glossiness];
+			*(dp_effect_->ParameterByName("metalness_glossiness_tex")) = textures_[RenderMaterial::TS_MetalnessGlossiness];
 			*(dp_effect_->ParameterByName("emissive_tex")) = textures_[RenderMaterial::TS_Emissive];
 			*(dp_effect_->ParameterByName("normal_tex")) = textures_[RenderMaterial::TS_Normal];
 
 			*(wb_effect_->ParameterByName("albedo_clr")) = mtl_->albedo;
-			*(wb_effect_->ParameterByName("metalness_clr")) = float2(mtl_->metalness,
-				textures_[RenderMaterial::TS_Metalness].get() ? 1.0f : 0.0f);
-			*(wb_effect_->ParameterByName("glossiness_clr")) = float2(mtl_->glossiness,
-				textures_[RenderMaterial::TS_Glossiness].get() ? 1.0f : 0.0f);
+			*(wb_effect_->ParameterByName("metalness_glossiness_factor")) =
+				float3(mtl_->metalness, mtl_->glossiness, textures_[RenderMaterial::TS_MetalnessGlossiness].get() ? 1.0f : 0.0f);
 			*(wb_effect_->ParameterByName("emissive_clr")) = float4(mtl_->emissive.x(), mtl_->emissive.y(), mtl_->emissive.z(),
 				textures_[RenderMaterial::TS_Emissive].get() ? 1.0f : 0.0f);
 			*(wb_effect_->ParameterByName("albedo_map_enabled"))
@@ -183,18 +176,15 @@ namespace
 			*(wb_effect_->ParameterByName("normal_map_enabled"))
 				= static_cast<int32_t>(textures_[RenderMaterial::TS_Normal].get() ? 1 : 0);
 			*(wb_effect_->ParameterByName("albedo_tex")) = textures_[RenderMaterial::TS_Albedo];
-			*(wb_effect_->ParameterByName("metalness_tex")) = textures_[RenderMaterial::TS_Metalness];
-			*(wb_effect_->ParameterByName("glossiness_tex")) = textures_[RenderMaterial::TS_Glossiness];
+			*(wb_effect_->ParameterByName("metalness_glossiness_tex")) = textures_[RenderMaterial::TS_MetalnessGlossiness];
 			*(wb_effect_->ParameterByName("emissive_tex")) = textures_[RenderMaterial::TS_Emissive];
 			*(wb_effect_->ParameterByName("normal_tex")) = textures_[RenderMaterial::TS_Normal];
 
 			if (gen_ppll_tech_)
 			{
 				*(gen_ppll_effect_->ParameterByName("albedo_clr")) = mtl_->albedo;
-				*(gen_ppll_effect_->ParameterByName("metalness_clr")) = float2(mtl_->metalness,
-					textures_[RenderMaterial::TS_Metalness].get() ? 1.0f : 0.0f);
-				*(gen_ppll_effect_->ParameterByName("glossiness_clr")) = float2(mtl_->glossiness,
-					textures_[RenderMaterial::TS_Glossiness].get() ? 1.0f : 0.0f);
+				*(gen_ppll_effect_->ParameterByName("metalness_glossiness_factor")) =
+					float3(mtl_->metalness, mtl_->glossiness, textures_[RenderMaterial::TS_MetalnessGlossiness].get() ? 1.0f : 0.0f);
 				*(gen_ppll_effect_->ParameterByName("emissive_clr")) = float4(mtl_->emissive.x(), mtl_->emissive.y(), mtl_->emissive.z(),
 					textures_[RenderMaterial::TS_Emissive].get() ? 1.0f : 0.0f);
 				*(gen_ppll_effect_->ParameterByName("albedo_map_enabled"))
@@ -202,18 +192,15 @@ namespace
 				*(gen_ppll_effect_->ParameterByName("normal_map_enabled"))
 					= static_cast<int32_t>(textures_[RenderMaterial::TS_Normal].get() ? 1 : 0);
 				*(gen_ppll_effect_->ParameterByName("albedo_tex")) = textures_[RenderMaterial::TS_Albedo];
-				*(gen_ppll_effect_->ParameterByName("metalness_tex")) = textures_[RenderMaterial::TS_Metalness];
-				*(gen_ppll_effect_->ParameterByName("glossiness_tex")) = textures_[RenderMaterial::TS_Glossiness];
+				*(gen_ppll_effect_->ParameterByName("metalness_glossiness_tex")) = textures_[RenderMaterial::TS_MetalnessGlossiness];
 				*(gen_ppll_effect_->ParameterByName("emissive_tex")) = textures_[RenderMaterial::TS_Emissive];
 				*(gen_ppll_effect_->ParameterByName("normal_tex")) = textures_[RenderMaterial::TS_Normal];
 			}
 			if (gen_rov_ppa_tech_)
 			{
 				*(gen_rov_ppa_effect_->ParameterByName("albedo_clr")) = mtl_->albedo;
-				*(gen_rov_ppa_effect_->ParameterByName("metalness_clr")) = float2(mtl_->metalness,
-					textures_[RenderMaterial::TS_Metalness].get() ? 1.0f : 0.0f);
-				*(gen_rov_ppa_effect_->ParameterByName("glossiness_clr")) = float2(mtl_->glossiness,
-					textures_[RenderMaterial::TS_Glossiness].get() ? 1.0f : 0.0f);
+				*(gen_rov_ppa_effect_->ParameterByName("metalness_glossiness_factor")) =
+					float3(mtl_->metalness, mtl_->glossiness, textures_[RenderMaterial::TS_MetalnessGlossiness].get() ? 1.0f : 0.0f);
 				*(gen_rov_ppa_effect_->ParameterByName("emissive_clr")) = float4(mtl_->emissive.x(), mtl_->emissive.y(), mtl_->emissive.z(),
 					textures_[RenderMaterial::TS_Emissive].get() ? 1.0f : 0.0f);
 				*(gen_rov_ppa_effect_->ParameterByName("albedo_map_enabled"))
@@ -221,8 +208,7 @@ namespace
 				*(gen_rov_ppa_effect_->ParameterByName("normal_map_enabled"))
 					= static_cast<int32_t>(textures_[RenderMaterial::TS_Normal].get() ? 1 : 0);
 				*(gen_rov_ppa_effect_->ParameterByName("albedo_tex")) = textures_[RenderMaterial::TS_Albedo];
-				*(gen_rov_ppa_effect_->ParameterByName("metalness_tex")) = textures_[RenderMaterial::TS_Metalness];
-				*(gen_rov_ppa_effect_->ParameterByName("glossiness_tex")) = textures_[RenderMaterial::TS_Glossiness];
+				*(gen_rov_ppa_effect_->ParameterByName("metalness_glossiness_tex")) = textures_[RenderMaterial::TS_MetalnessGlossiness];
 				*(gen_rov_ppa_effect_->ParameterByName("emissive_tex")) = textures_[RenderMaterial::TS_Emissive];
 				*(gen_rov_ppa_effect_->ParameterByName("normal_tex")) = textures_[RenderMaterial::TS_Normal];
 			}
@@ -580,7 +566,7 @@ void OITApp::OnCreate()
 		CreateModelFactory<RenderModel>, CreateMeshFactory<RenderPolygon>);
 	polygon_model_->ForEachMesh([](Renderable& mesh)
 		{
-			checked_cast<RenderPolygon*>(&mesh)->LightPos(float3(-1, 2, 1));
+			checked_cast<RenderPolygon&>(mesh).LightPos(float3(-1, 2, 1));
 		});
 
 	this->LookAt(float3(-2.0f, 2.0f, 2.0f), float3(0, 1, 0));
@@ -592,9 +578,10 @@ void OITApp::OnCreate()
 
 	TexturePtr y_cube_map = ASyncLoadTexture("uffizi_cross_filtered_y.dds", EAH_GPU_Read | EAH_Immutable);
 	TexturePtr c_cube_map = ASyncLoadTexture("uffizi_cross_filtered_c.dds", EAH_GPU_Read | EAH_Immutable);
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableSkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableSkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube_map, c_cube_map);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
+	auto skybox = MakeSharedPtr<RenderableSkyBox>();
+	skybox->CompressedCubeMap(y_cube_map, c_cube_map);
+	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(
+		MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableComponent>(skybox), SceneNode::SOA_NotCastShadow));
 
 	depth_texture_support_ = caps.depth_texture_support;
 
@@ -776,7 +763,7 @@ void OITApp::OnResize(uint32_t width, uint32_t height)
 
 		polygon_model_->ForEachMesh([this](Renderable& mesh)
 			{
-				checked_cast<RenderPolygon*>(&mesh)->BackgroundTex(opaque_bg_tex_);
+				checked_cast<RenderPolygon&>(mesh).BackgroundTex(opaque_bg_tex_);
 			});
 
 		if (caps.rovs_support)
@@ -807,7 +794,7 @@ void OITApp::OITModeHandler(KlayGE::UIComboBox const & sender)
 	oit_mode_ = static_cast<OITMode>(sender.GetSelectedIndex());
 	polygon_model_->ForEachMesh([this](Renderable& mesh)
 		{
-			checked_cast<RenderPolygon*>(&mesh)->SetOITMode(oit_mode_);
+			checked_cast<RenderPolygon&>(mesh).SetOITMode(oit_mode_);
 		});
 	dialog_layer_->SetVisible(OM_DepthPeeling == oit_mode_);
 }
@@ -817,7 +804,7 @@ void OITApp::AlphaHandler(KlayGE::UISlider const & sender)
 	float alpha = sender.GetValue() * 0.01f;
 	polygon_model_->ForEachMesh([alpha](Renderable& mesh)
 		{
-			checked_cast<RenderPolygon*>(&mesh)->SetAlpha(alpha);
+			checked_cast<RenderPolygon&>(mesh).SetAlpha(alpha);
 		});
 	std::wostringstream stream;
 	stream.precision(2);
@@ -868,7 +855,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 	{
 		polygon_model_->ForEachMesh([this](Renderable& mesh)
 			{
-				checked_cast<RenderPolygon*>(&mesh)->LinkedListBuffer(frag_link_uav_, frag_link_srv_,
+				checked_cast<RenderPolygon&>(mesh).LinkedListBuffer(frag_link_uav_, frag_link_srv_,
 					(OM_RovAdaptiveTransparency == oit_mode_) ? frag_length_uav_ : start_offset_uav_,
 					(OM_RovAdaptiveTransparency == oit_mode_) ? frag_length_srv_ : start_offset_srv_);
 			});
@@ -890,7 +877,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 		case 1:
 			polygon_model_->ForEachMesh([](Renderable& mesh)
 				{
-					checked_cast<RenderPolygon*>(&mesh)->FirstPass(true);
+					checked_cast<RenderPolygon&>(mesh).FirstPass(true);
 				});
 			
 			{
@@ -911,7 +898,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 		default:
 			polygon_model_->ForEachMesh([](Renderable& mesh)
 				{
-					checked_cast<RenderPolygon*>(&mesh)->FirstPass(false);
+					checked_cast<RenderPolygon&>(mesh).FirstPass(false);
 				});
 
 			re.BindFrameBuffer(FrameBufferPtr());
@@ -935,7 +922,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 		case 1:
 			polygon_model_->ForEachMesh([](Renderable& mesh)
 				{
-					checked_cast<RenderPolygon*>(&mesh)->FirstPass(true);
+					checked_cast<RenderPolygon&>(mesh).FirstPass(true);
 				});
 
 			re.BindFrameBuffer(weighted_fb_);
@@ -946,7 +933,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 			re.BindFrameBuffer(FrameBufferPtr());
 			polygon_model_->ForEachMesh([this](Renderable& mesh)
 				{
-					checked_cast<RenderPolygon*>(&mesh)->AccumWeightTextures(accum_tex_, weight_tex_);
+					checked_cast<RenderPolygon&>(mesh).AccumWeightTextures(accum_tex_, weight_tex_);
 				});
 			checked_pointer_cast<RenderPolygon>(polygon_model_->Mesh(0))->RenderQuad();
 			return App3DFramework::URV_Finished;
@@ -970,7 +957,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 
 					polygon_model_->ForEachMesh([](Renderable& mesh)
 						{
-							checked_cast<RenderPolygon*>(&mesh)->FirstPass(true);
+							checked_cast<RenderPolygon&>(mesh).FirstPass(true);
 						});
 					re.BindFrameBuffer(peeling_fbs_[0]);
 					re.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, Color(0, 0, 0, 0), 1, 0);
@@ -980,7 +967,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 				{
 					polygon_model_->ForEachMesh([](Renderable& mesh)
 						{
-							checked_cast<RenderPolygon*>(&mesh)->FirstPass(false);
+							checked_cast<RenderPolygon&>(mesh).FirstPass(false);
 						});
 
 					bool finished = false;
@@ -1019,7 +1006,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 						{
 							polygon_model_->ForEachMesh([this, layer](Renderable& mesh)
 								{
-									checked_cast<RenderPolygon*>(&mesh)->LastDepth(depth_texs_[(layer - 1) % 2]);
+									checked_cast<RenderPolygon&>(mesh).LastDepth(depth_texs_[(layer - 1) % 2]);
 								});
 
 							re.BindFrameBuffer(peeling_fbs_[layer]);
@@ -1062,7 +1049,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 
 					polygon_model_->ForEachMesh([depth_pass](Renderable& mesh)
 						{
-							auto& polygon_mesh = *checked_cast<RenderPolygon*>(&mesh);
+							auto& polygon_mesh = checked_cast<RenderPolygon&>(mesh);
 
 							polygon_mesh.FirstPass(true);
 							polygon_mesh.DepthPass(depth_pass);
@@ -1083,7 +1070,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 				{
 					polygon_model_->ForEachMesh([depth_pass](Renderable& mesh)
 						{
-							auto& polygon_mesh = *checked_cast<RenderPolygon*>(&mesh);
+							auto& polygon_mesh = checked_cast<RenderPolygon&>(mesh);
 
 							polygon_mesh.FirstPass(false);
 							polygon_mesh.DepthPass(depth_pass);
@@ -1129,7 +1116,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 						{
 							polygon_model_->ForEachMesh([this, layer](Renderable& mesh)
 								{
-									checked_cast<RenderPolygon*>(&mesh)->LastDepth(depth_texs_[(layer - 1) % 2]);
+									checked_cast<RenderPolygon&>(mesh).LastDepth(depth_texs_[(layer - 1) % 2]);
 								});
 
 							if (depth_pass)
@@ -1183,7 +1170,7 @@ uint32_t OITApp::DoUpdate(uint32_t pass)
 	{
 		polygon_model_->ForEachMesh([](Renderable& mesh)
 			{
-				checked_cast<RenderPolygon*>(&mesh)->FirstPass(true);
+				checked_cast<RenderPolygon&>(mesh).FirstPass(true);
 			});
 
 		re.BindFrameBuffer(FrameBufferPtr());

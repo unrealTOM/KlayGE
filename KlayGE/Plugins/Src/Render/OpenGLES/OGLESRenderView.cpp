@@ -53,8 +53,8 @@ namespace KlayGE
 	{
 		if ((gl_tex_ == 0) && tex_ && tex_->HWResourceReady())
 		{
-			gl_target_ = checked_cast<OGLESTexture*>(tex_.get())->GLType();
-			gl_tex_ = checked_cast<OGLESTexture*>(tex_.get())->GLTexture();
+			gl_target_ = checked_cast<OGLESTexture&>(*tex_).GLType();
+			gl_tex_ = checked_cast<OGLESTexture&>(*tex_).GLTexture();
 		}
 		target = gl_target_;
 		tex = gl_tex_;
@@ -83,7 +83,7 @@ namespace KlayGE
 	{
 		if ((gl_tex_ == 0) && buff_ && buff_->HWResourceReady())
 		{
-			gl_tex_ = checked_cast<OGLESGraphicsBuffer*>(buff_.get())->RetrieveGLTexture(pf_);
+			gl_tex_ = checked_cast<OGLESGraphicsBuffer&>(*buff_).RetrieveGLTexture(pf_);
 		}
 		target = gl_target_;
 		tex = gl_tex_;
@@ -94,14 +94,14 @@ namespace KlayGE
 	{
 		if ((gl_tex_ == 0) && (tex_->HWResourceReady()))
 		{
-			gl_tex_ = checked_cast<OGLESTexture*>(tex_.get())->GLTexture();
+			gl_tex_ = checked_cast<OGLESTexture&>(*tex_).GLTexture();
 		}
 		return gl_tex_;
 	}
 
 	void OGLESRenderTargetView::DoClearColor(Color const & clr)
 	{
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 
 		GLuint old_fbo = re.BindFramebuffer();
 		re.BindFramebuffer(gl_fbo_);
@@ -138,7 +138,7 @@ namespace KlayGE
 			attachment = GL_COLOR;
 		}
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 
 		GLuint old_fbo = re.BindFramebuffer();
 		re.BindFramebuffer(gl_fbo_);
@@ -178,14 +178,14 @@ namespace KlayGE
 	{
 		if ((gl_tex_ == 0) && (tex_->HWResourceReady()))
 		{
-			gl_tex_ = checked_cast<OGLESTexture*>(tex_.get())->GLTexture();
+			gl_tex_ = checked_cast<OGLESTexture&>(*tex_).GLTexture();
 		}
 		return gl_tex_;
 	}
 
 	void OGLESDepthStencilView::DoClearDepthStencil(uint32_t flags, float depth, int32_t stencil)
 	{
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 
 		GLuint old_fbo = re.BindFramebuffer();
 		re.BindFramebuffer(gl_fbo_);
@@ -267,7 +267,7 @@ namespace KlayGE
 			attachments[1] = GL_STENCIL;
 		}
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 
 		GLuint old_fbo = re.BindFramebuffer();
 		re.BindFramebuffer(gl_fbo_);
@@ -301,11 +301,11 @@ namespace KlayGE
 	{
 		KFL_UNUSED(fb);
 
-		BOOST_ASSERT(0 == checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo());
+		BOOST_ASSERT(0 == checked_cast<OGLESFrameBuffer&>(fb).OGLFbo());
 
 		index_ = static_cast<uint32_t>(att);
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(0);
 	}
 
@@ -314,9 +314,9 @@ namespace KlayGE
 		KFL_UNUSED(fb);
 		KFL_UNUSED(att);
 
-		BOOST_ASSERT(0 == checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo());
+		BOOST_ASSERT(0 == checked_cast<OGLESFrameBuffer&>(fb).OGLFbo());
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(0);
 	}
 	
@@ -346,9 +346,9 @@ namespace KlayGE
 	{
 		KFL_UNUSED(fb);
 
-		BOOST_ASSERT(0 == checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo());
+		BOOST_ASSERT(0 == checked_cast<OGLESFrameBuffer&>(fb).OGLFbo());
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(0);
 	}
 
@@ -356,9 +356,9 @@ namespace KlayGE
 	{
 		KFL_UNUSED(fb);
 
-		BOOST_ASSERT(0 == checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo());
+		BOOST_ASSERT(0 == checked_cast<OGLESFrameBuffer&>(fb).OGLFbo());
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(0);
 	}
 	
@@ -399,9 +399,9 @@ namespace KlayGE
 		}
 		else
 		{
-			GLenum const gl_target = checked_cast<OGLESTexture*>(tex_.get())->GLType();
+			GLenum const gl_target = checked_cast<OGLESTexture&>(*tex_).GLType();
 
-			OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 			re.BindTexture(0, gl_target, gl_tex_);
 
 			std::vector<Color> mem_clr(width_, clr);
@@ -417,10 +417,10 @@ namespace KlayGE
 	void OGLESTexture1DRenderTargetView::OnAttached(FrameBuffer& fb, FrameBuffer::Attachment att)
 	{
 		index_ = static_cast<uint32_t>(att);
-		gl_fbo_ = checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo();
-		GLenum const gl_target = checked_cast<OGLESTexture*>(tex_.get())->GLType();
+		gl_fbo_ = checked_cast<OGLESFrameBuffer&>(fb).OGLFbo();
+		GLenum const gl_target = checked_cast<OGLESTexture&>(*tex_).GLType();
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 
 		if (GL_TEXTURE_2D == gl_target)
@@ -448,12 +448,12 @@ namespace KlayGE
 	{
 		KFL_UNUSED(fb);
 
-		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo());
+		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer&>(fb).OGLFbo());
 
 		uint32_t const index = static_cast<uint32_t>(att);
-		GLenum const gl_target = checked_cast<OGLESTexture*>(tex_.get())->GLType();
+		GLenum const gl_target = checked_cast<OGLESTexture&>(*tex_).GLType();
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 
 		if (GL_TEXTURE_2D == gl_target)
@@ -509,9 +509,9 @@ namespace KlayGE
 		}
 		else
 		{
-			GLenum const gl_target = checked_cast<OGLESTexture*>(tex_.get())->GLType();
+			GLenum const gl_target = checked_cast<OGLESTexture&>(*tex_).GLType();
 
-			OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 			re.BindTexture(0, gl_target, gl_tex_);
 
 			std::vector<Color> mem_clr(width_ * height_, clr);
@@ -527,10 +527,10 @@ namespace KlayGE
 	void OGLESTexture2DRenderTargetView::OnAttached(FrameBuffer& fb, FrameBuffer::Attachment att)
 	{
 		index_ = static_cast<uint32_t>(att);
-		gl_fbo_ = checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo();
-		GLenum const gl_target = checked_cast<OGLESTexture*>(tex_.get())->GLType();
+		gl_fbo_ = checked_cast<OGLESFrameBuffer&>(fb).OGLFbo();
+		GLenum const gl_target = checked_cast<OGLESTexture&>(*tex_).GLType();
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 
 		if (GL_TEXTURE_2D == gl_target)
@@ -558,12 +558,12 @@ namespace KlayGE
 	{
 		KFL_UNUSED(fb);
 
-		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo());
+		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer&>(fb).OGLFbo());
 
 		uint32_t const index = static_cast<uint32_t>(att);
-		GLenum const gl_target = checked_cast<OGLESTexture*>(tex_.get())->GLType();
+		GLenum const gl_target = checked_cast<OGLESTexture&>(*tex_).GLType();
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 
 		if (GL_TEXTURE_2D == gl_target)
@@ -615,7 +615,7 @@ namespace KlayGE
 		{
 			if (Context::Instance().RenderFactoryValid())
 			{
-				auto& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+				auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 				re.DeleteTextures(1, &gl_tex_2d_);
 			}
 			else
@@ -641,8 +641,8 @@ namespace KlayGE
 	{
 		index_ = static_cast<uint32_t>(att);
 
-		gl_fbo_ = checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo();
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		gl_fbo_ = checked_cast<OGLESFrameBuffer&>(fb).OGLFbo();
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 
 		if (0 == copy_to_tex_)
@@ -688,11 +688,11 @@ namespace KlayGE
 	{
 		KFL_UNUSED(fb);
 
-		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo());
+		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer&>(fb).OGLFbo());
 
 		uint32_t const index = static_cast<uint32_t>(att);
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 
 		BOOST_ASSERT(copy_to_tex_ != 0);
@@ -729,7 +729,7 @@ namespace KlayGE
 	{
 		KFL_UNUSED(att);
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindTexture(0, GL_TEXTURE_3D, gl_tex_);
 		glCopyTexSubImage3D(GL_TEXTURE_3D, level_, 0, 0, slice_, 0, 0, width_, height_);
 	}
@@ -783,7 +783,7 @@ namespace KlayGE
 		}
 		else
 		{
-			OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 			re.BindTexture(0, GL_TEXTURE_CUBE_MAP, gl_tex_);
 
 			std::vector<Color> mem_clr(width_ * height_, clr);
@@ -801,8 +801,8 @@ namespace KlayGE
 	{
 		index_ = static_cast<uint32_t>(att);
 
-		gl_fbo_ = checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo();
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		gl_fbo_ = checked_cast<OGLESFrameBuffer&>(fb).OGLFbo();
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 		if (face_ >= 0)
 		{
@@ -824,11 +824,11 @@ namespace KlayGE
 	{
 		KFL_UNUSED(fb);
 
-		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo());
+		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer&>(fb).OGLFbo());
 
 		uint32_t const index = static_cast<uint32_t>(att);
 
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 
 		GLenum face = GL_TEXTURE_CUBE_MAP_POSITIVE_X + face_ - Texture::CF_Positive_X;
@@ -894,7 +894,7 @@ namespace KlayGE
 
 	OGLESTextureDepthStencilView::OGLESTextureDepthStencilView(TexturePtr const & texture, ElementFormat pf, int array_index, int array_size,
 		int level)
-		: target_type_(checked_cast<OGLESTexture*>(texture.get())->GLType()),
+		: target_type_(checked_cast<OGLESTexture&>(*texture).GLType()),
 			array_index_(array_index), array_size_(array_size), level_(level)
 	{
 		BOOST_ASSERT((Texture::TT_2D == texture->Type()) || (Texture::TT_Cube == texture->Type()));
@@ -931,10 +931,10 @@ namespace KlayGE
 
 	void OGLESTextureDepthStencilView::OnAttached(FrameBuffer& fb)
 	{
-		gl_fbo_ = checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo();
+		gl_fbo_ = checked_cast<OGLESFrameBuffer&>(fb).OGLFbo();
 		if (level_ < 0)
 		{
-			OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 			re.BindFramebuffer(gl_fbo_);
 
 			glFramebufferRenderbuffer(GL_FRAMEBUFFER,
@@ -951,7 +951,7 @@ namespace KlayGE
 		}
 		else
 		{
-			OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 			if (GL_TEXTURE_2D == target_type_)
 			{
 				re.BindFramebuffer(gl_fbo_);
@@ -1020,10 +1020,10 @@ namespace KlayGE
 	{
 		KFL_UNUSED(fb);
 
-		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo());
+		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer&>(fb).OGLFbo());
 		if (level_ < 0)
 		{
-			OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 			re.BindFramebuffer(gl_fbo_);
 
 			glFramebufferRenderbuffer(GL_FRAMEBUFFER,
@@ -1037,7 +1037,7 @@ namespace KlayGE
 		}
 		else
 		{
-			OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 			if (GL_TEXTURE_2D == target_type_)
 			{
 				re.BindFramebuffer(gl_fbo_);
@@ -1138,9 +1138,9 @@ namespace KlayGE
 
 	void OGLESTextureCubeFaceDepthStencilView::OnAttached(FrameBuffer& fb)
 	{
-		gl_fbo_ = checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo();
+		gl_fbo_ = checked_cast<OGLESFrameBuffer&>(fb).OGLFbo();
 		GLenum face = GL_TEXTURE_CUBE_MAP_POSITIVE_X + face_ - Texture::CF_Positive_X;
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 
 		if (IsDepthFormat(pf_))
@@ -1162,7 +1162,7 @@ namespace KlayGE
 		KFL_UNUSED(fb);
 
 		GLenum face = GL_TEXTURE_CUBE_MAP_POSITIVE_X + face_ - Texture::CF_Positive_X;
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 
 		if (IsDepthFormat(pf_))
@@ -1212,9 +1212,9 @@ namespace KlayGE
 	void OGLESEAGLRenderView::OnAttached(FrameBuffer& fb, FrameBuffer::Attachment att)
 	{
 		index_ = static_cast<uint32_t>(att);
-		gl_fbo_ = checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo();
+		gl_fbo_ = checked_cast<OGLESFrameBuffer&>(fb).OGLFbo();
 		
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 		
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
@@ -1228,9 +1228,9 @@ namespace KlayGE
 		KFL_UNUSED(fb);
 		KFL_UNUSED(att);
 
-		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer*>(&fb)->OGLFbo());
+		BOOST_ASSERT(gl_fbo_ == checked_cast<OGLESFrameBuffer&>(fb).OGLFbo());
 		
-		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLESRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindFramebuffer(gl_fbo_);
 		
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,

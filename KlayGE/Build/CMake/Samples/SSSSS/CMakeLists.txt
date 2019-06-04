@@ -1,4 +1,4 @@
-DOWNLOAD_DEPENDENCY("KlayGE/Samples/media/SSSSS/Infinite-Level_02.meshml" "6C0B72867A8A2C5A291BDC535EB8285CBF5E9A1D")
+DOWNLOAD_DEPENDENCY("KlayGE/Samples/media/SSSSS/Infinite-Level_02.glb" "BDAD2D49D23FD10778E251CB95A09BC1BD6A3125")
 DOWNLOAD_DEPENDENCY("KlayGE/Samples/media/SSSSS/Infinite-Level_02_Tangent_SmoothUV.jpg" "24395FF82ADF81FF094CBF6ED5C93A6BEAF83C31")
 DOWNLOAD_DEPENDENCY("KlayGE/Samples/media/SSSSS/Map-COL.jpg" "6C84DCC480BEBAE97DBC039C279F9C08C4DED2E2")
 
@@ -23,11 +23,13 @@ SET(CONTENT_FILES
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/Copy.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/Copy2LightBuffer.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/Depth.ppml
+	${KLAYGE_PROJECT_DIR}/media/PostProcessors/DepthOfField.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/LensEffects.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/MultiRes.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/PostToneMapping.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/Resizer.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/RSM2VPLs.ppml
+	${KLAYGE_PROJECT_DIR}/media/PostProcessors/SAT.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/SMAA.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/SSVO.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/TAA.ppml
@@ -42,6 +44,7 @@ SET(CONTENT_FILES
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/DeferredRendering.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/DeferredRenderingDebug.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/Depth.kfx
+	${KLAYGE_PROJECT_DIR}/media/RenderFX/DepthOfField.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/GBuffer.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/GBuffer+GBufferSSS.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/Font.kfx
@@ -53,6 +56,7 @@ SET(CONTENT_FILES
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/PostToneMapping.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/Resizer.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/RSM2VPLs.kfx
+	${KLAYGE_PROJECT_DIR}/media/RenderFX/SAT.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/SkyBox.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/SMAA.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/SSGI.kfx
@@ -65,6 +69,7 @@ SET(CONTENT_FILES
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/VarianceDepthMap.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/VPLsLighting.kfx
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/UI.kfx
+	${KLAYGE_PROJECT_DIR}/media/Textures/2D/BokehPattern.dds
 	${KLAYGE_PROJECT_DIR}/media/Textures/2D/powered_by_klayge.dds
 	${KLAYGE_PROJECT_DIR}/media/Textures/2D/SMAAAreaTex.dds
 	${KLAYGE_PROJECT_DIR}/media/Textures/2D/SMAASearchTex.dds
@@ -82,7 +87,7 @@ SET(CONTENT_FILES
 	${KLAYGE_PROJECT_DIR}/Samples/media/Common/ScifiRoom/SCI6.JPG.dds
 	${KLAYGE_PROJECT_DIR}/Samples/media/Common/ScifiRoom/SCI8.JPG.dds
 	${KLAYGE_PROJECT_DIR}/Samples/media/Common/ScifiRoom/SCI9.JPG.dds
-	${KLAYGE_PROJECT_DIR}/Samples/media/SSSSS/Infinite-Level_02.meshml.model_bin
+	${KLAYGE_PROJECT_DIR}/Samples/media/SSSSS/Infinite-Level_02.glb.model_bin
 	${KLAYGE_PROJECT_DIR}/Samples/media/SSSSS/Infinite-Level_02_Tangent_SmoothUV.jpg.dds
 	${KLAYGE_PROJECT_DIR}/Samples/media/SSSSS/Map-COL.jpg.dds
 )

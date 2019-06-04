@@ -123,6 +123,10 @@ namespace KlayGE
 
 		screen_frame_buffer_ = cur_frame_buffer_;
 
+		screen_frame_buffer_camera_node_ =
+			MakeSharedPtr<SceneNode>(L"CameraNode", SceneNode::SOA_Cullable | SceneNode::SOA_Moveable | SceneNode::SOA_NotCastShadow);
+		screen_frame_buffer_camera_node_->AddComponent(screen_frame_buffer_->GetViewport()->camera);
+
 		uint32_t const screen_width = screen_frame_buffer_->Width();
 		uint32_t const screen_height = screen_frame_buffer_->Height();
 		float const screen_aspect = static_cast<float>(screen_width) / screen_height;
@@ -563,18 +567,27 @@ namespace KlayGE
 	/////////////////////////////////////////////////////////////////////////////////
 	void RenderEngine::Render(RenderEffect const & effect, RenderTechnique const & tech, RenderLayout const & rl)
 	{
-		this->DoRender(effect, tech, rl);
+		if (tech.HWResourceReady(effect))
+		{
+			this->DoRender(effect, tech, rl);
+		}
 	}
 
 	void RenderEngine::Dispatch(RenderEffect const & effect, RenderTechnique const & tech, uint32_t tgx, uint32_t tgy, uint32_t tgz)
 	{
-		this->DoDispatch(effect, tech, tgx, tgy, tgz);
+		if (tech.HWResourceReady(effect))
+		{
+			this->DoDispatch(effect, tech, tgx, tgy, tgz);
+		}
 	}
 
 	void RenderEngine::DispatchIndirect(RenderEffect const & effect, RenderTechnique const & tech,
 		GraphicsBufferPtr const & buff_args, uint32_t offset)
 	{
-		this->DoDispatchIndirect(effect, tech, buff_args, offset);
+		if (tech.HWResourceReady(effect))
+		{
+			this->DoDispatchIndirect(effect, tech, buff_args, offset);
+		}
 	}
 
 	// 上次Render()所渲染的图元数

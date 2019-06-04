@@ -50,7 +50,7 @@ namespace
 {
 	using namespace KlayGE;
 
-	uint32_t const MODEL_BIN_VERSION = 16;
+	uint32_t const MODEL_BIN_VERSION = 17;
 
 	class RenderModelLoadingDesc : public ResLoadingDesc
 	{
@@ -455,7 +455,7 @@ namespace KlayGE
 			std::vector<StaticMeshPtr> meshes(source.NumMeshes());
 			for (uint32_t mesh_index = 0; mesh_index < source.NumMeshes(); ++ mesh_index)
 			{
-				auto const & src_mesh = *checked_pointer_cast<StaticMesh>(source.Mesh(mesh_index));
+				auto const& src_mesh = checked_cast<StaticMesh&>(*source.Mesh(mesh_index));
 
 				meshes[mesh_index] = CreateMeshFactoryFunc(src_mesh.Name());
 				auto& mesh = *meshes[mesh_index];
@@ -510,13 +510,14 @@ namespace KlayGE
 				}
 				new_nodes.push_back(new_node);
 
-				for (uint32_t i = 0; i < node.NumRenderables(); ++ i)
+				for (uint32_t i = 0; i < node.NumComponents(); ++ i)
 				{
 					for (uint32_t mesh_index = 0; mesh_index < source.NumMeshes(); ++ mesh_index)
 					{
-						if (node.GetRenderable(i) == source.Mesh(mesh_index))
+						if (&checked_cast<RenderableComponent&>(*node.ComponentByIndex(i)).BoundRenderable() ==
+							source.Mesh(mesh_index).get())
 						{
-							new_node->AddRenderable(this->Mesh(mesh_index));
+							new_node->AddComponent(MakeSharedPtr<RenderableComponent>(this->Mesh(mesh_index)));
 							break;
 						}
 					}
@@ -873,7 +874,7 @@ namespace KlayGE
 		AABBox pos_aabb(float3(0, 0, 0), float3(0, 0, 0));
 		this->ForEachMesh([&pos_aabb, frame](Renderable& mesh)
 			{
-				pos_aabb |= checked_cast<SkinnedMesh*>(&mesh)->FramePosBound(frame);
+				pos_aabb |= checked_cast<SkinnedMesh&>(mesh).FramePosBound(frame);
 			});
 
 		return pos_aabb;
@@ -916,8 +917,8 @@ namespace KlayGE
 
 		if (source.IsSkinned())
 		{
-			auto const & src_skinned_model = *checked_cast<SkinnedModel const *>(&source);
-			auto& skinned_model = *checked_cast<SkinnedModel*>(this);
+			auto const& src_skinned_model = checked_cast<SkinnedModel const&>(source);
+			auto& skinned_model = checked_cast<SkinnedModel&>(*this);
 
 			std::vector<Joint> joints(src_skinned_model.NumJoints());
 			for (uint32_t i = 0; i < src_skinned_model.NumJoints(); ++ i)
@@ -932,8 +933,8 @@ namespace KlayGE
 
 			for (size_t mesh_index = 0; mesh_index < src_skinned_model.NumMeshes(); ++ mesh_index)
 			{
-				auto const & src_skinned_mesh = *checked_pointer_cast<SkinnedMesh>(src_skinned_model.Mesh(mesh_index));
-				auto& skinned_mesh = *checked_pointer_cast<SkinnedMesh>(skinned_model.Mesh(mesh_index));
+				auto const& src_skinned_mesh = checked_cast<SkinnedMesh const&>(*src_skinned_model.Mesh(mesh_index));
+				auto& skinned_mesh = checked_cast<SkinnedMesh&>(*skinned_model.Mesh(mesh_index));
 				skinned_mesh.AttachFramePosBounds(src_skinned_mesh.GetFramePosBounds());
 			}
 
@@ -1567,7 +1568,7 @@ namespace KlayGE
 		{
 			for (auto mesh_index : node.second)
 			{
-				node.first->AddRenderable(meshes[mesh_index]);
+				node.first->AddComponent(MakeSharedPtr<RenderableComponent>(meshes[mesh_index]));
 			}
 		}
 
@@ -1746,8 +1747,9 @@ namespace KlayGE
 			os.write(reinterpret_cast<char*>(&node_parent), sizeof(node_parent));
 
 			std::vector<uint16_t> mesh_indices;
-			nodes[i]->ForEachRenderable([&renderables, &mesh_indices](Renderable& mesh)
+			nodes[i]->ForEachComponentOfType<RenderableComponent>([&renderables, &mesh_indices](RenderableComponent& mesh_comp)
 				{
+					auto& mesh = mesh_comp.BoundRenderable();
 					for (size_t i = 0; i < renderables.size(); ++ i)
 					{
 						if (renderables[i] == &mesh)
@@ -1999,7 +2001,7 @@ namespace KlayGE
 		if (!mesh_names.empty())
 		{
 			{
-				StaticMesh const & mesh = *checked_pointer_cast<StaticMesh>(model.Mesh(0));
+				auto const& mesh = checked_cast<StaticMesh&>(*model.Mesh(0));
 
 				RenderLayout const & rl = mesh.GetRenderLayout();
 				merged_ves.resize(rl.NumVertexStreams());
@@ -2065,7 +2067,7 @@ namespace KlayGE
 
 			for (uint32_t mesh_index = 0; mesh_index < mesh_names.size(); ++ mesh_index)
 			{
-				StaticMesh const & mesh = *checked_pointer_cast<StaticMesh>(model.Mesh(mesh_index));
+				auto const& mesh = checked_cast<StaticMesh&>(*model.Mesh(mesh_index));
 
 				Convert(mesh_names[mesh_index], mesh.Name());
 				mtl_ids[mesh_index] = mesh.MaterialID();
@@ -2109,7 +2111,7 @@ namespace KlayGE
 		std::vector<std::shared_ptr<AABBKeyFrameSet>> frame_pos_bbs;
 		if (model.IsSkinned())
 		{
-			auto& skinned_model = *checked_cast<SkinnedModel const *>(&model);
+			auto const& skinned_model = checked_cast<SkinnedModel const&>(model);
 
 			uint32_t num_joints = skinned_model.NumJoints();
 			joints.resize(num_joints);
@@ -2159,7 +2161,7 @@ namespace KlayGE
 			frame_pos_bbs.resize(mesh_names.size());
 			for (uint32_t mesh_index = 0; mesh_index < mesh_names.size(); ++ mesh_index)
 			{
-				auto& skinned_mesh = *checked_pointer_cast<SkinnedMesh>(skinned_model.Mesh(mesh_index));
+				auto& skinned_mesh = checked_cast<SkinnedMesh&>(*skinned_model.Mesh(mesh_index));
 				frame_pos_bbs[mesh_index] = skinned_mesh.GetFramePosBounds();
 			}
 		}

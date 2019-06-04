@@ -7,6 +7,7 @@ DOWNLOAD_DEPENDENCY("KlayGE/media/Models/IndirectLightProxy.glb" "81F92384D96A55
 DOWNLOAD_DEPENDENCY("KlayGE/media/Models/PointLightProxy.glb" "8F5DB5C3B100214D5C9D9AE0A5C3227710A95073")
 DOWNLOAD_DEPENDENCY("KlayGE/media/Models/SpotLightProxy.glb" "C0E44F1827A48C99B335944CE9F6D98811ABABAB")
 DOWNLOAD_DEPENDENCY("KlayGE/media/Models/TubeLightProxy.glb" "495A9CE81FC81EB96B4D7341FA3A383C78C5094F")
+DOWNLOAD_DEPENDENCY("KlayGE/media/Textures/2D/BokehPattern.dds" "4CB297F9EF900D7FA5E24FFF333430379DDA8BE2")
 DOWNLOAD_DEPENDENCY("KlayGE/media/Textures/2D/fBm5_grad_tex.dds" "D51AB2BFEC5BC93FBD5C1AFBE8AE30D823938C45")
 DOWNLOAD_DEPENDENCY("KlayGE/media/Textures/2D/fBm5_tex.dds" "d3c1f21fc2d6bcdd4a445f8fcd7f8f59d12c395f")
 DOWNLOAD_DEPENDENCY("KlayGE/media/Textures/2D/flare.dds" "1438372d81bea4f721a6e664caf0c0a41f11f674")
@@ -77,6 +78,7 @@ SET(RENDERING_SOURCE_FILES
 	${KLAYGE_PROJECT_DIR}/Core/Src/Render/CameraController.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Render/CascadedShadowLayer.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Render/DeferredRenderingLayer.cpp
+	${KLAYGE_PROJECT_DIR}/Core/Src/Render/DepthOfField.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Render/DistanceField.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Render/ElementFormat.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Render/Fence.cpp
@@ -130,6 +132,7 @@ SET(RENDERING_HEADER_FILES
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/CameraController.hpp
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/CascadedShadowLayer.hpp
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/DeferredRenderingLayer.hpp
+	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/DepthOfField.hpp
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/DistanceField.hpp
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/ElementFormat.hpp
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/Fence.hpp
@@ -197,6 +200,7 @@ SET(RENDERING_EFFECT_FILES
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/DeferredRenderingDebug.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/DeferredRenderingUtil.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/Depth.fxml
+	${KLAYGE_PROJECT_DIR}/media/RenderFX/DepthOfField.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/FFT.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/Fog.fxml
 	${KLAYGE_PROJECT_DIR}/media/RenderFX/Font.fxml
@@ -255,6 +259,7 @@ SET(RENDERING_POSTPROCESSOR_FILES
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/Copy.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/Copy2LightBuffer.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/Depth.ppml
+	${KLAYGE_PROJECT_DIR}/media/PostProcessors/DepthOfField.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/FFT.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/Fog.ppml
 	${KLAYGE_PROJECT_DIR}/media/PostProcessors/FXAA.ppml
@@ -369,12 +374,14 @@ SOURCE_GROUP("Input System\\Header Files" FILES ${INPUT_HEADER_FILES})
 
 
 SET(SCENE_SOURCE_FILES
+	${KLAYGE_PROJECT_DIR}/Core/Src/Scene/SceneComponent.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Scene/SceneManager.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Scene/SceneNode.cpp
 	${KLAYGE_PROJECT_DIR}/Core/Src/Scene/SceneNodeHelper.cpp
 )
 
 SET(SCENE_HEADER_FILES
+	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/SceneComponent.hpp
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/SceneManager.hpp
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/SceneNode.hpp
 	${KLAYGE_PROJECT_DIR}/Core/Include/KlayGE/SceneNodeHelper.hpp
@@ -564,11 +571,6 @@ TARGET_LINK_LIBRARIES(${LIB_NAME}
 )
 
 add_dependencies(${LIB_NAME} KFL kfont 7zxa LZMA TableGen)
-if(KLAYGE_IS_DEV_PLATFORM)
-	if((NOT (KLAYGE_ARCH_NAME STREQUAL "arm")) AND (NOT (KLAYGE_ARCH_NAME STREQUAL "arm64")))
-		add_dependencies(${LIB_NAME} UniversalDXSDKRedist)
-	endif()
-endif()
 if(KLAYGE_PLATFORM_LINUX)
 	add_dependencies(${LIB_NAME} glloader)
 elseif(KLAYGE_PLATFORM_ANDROID)

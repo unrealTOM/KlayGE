@@ -85,11 +85,13 @@ namespace KlayGE
 	public:
 		explicit D3D11ShaderStageObject(ShaderStage stage);
 
-		void StreamIn(RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids,
-			std::vector<uint8_t> const& native_shader_block) override;
+		void StreamIn(
+			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids, ResIdentifier& res) override;
 		void StreamOut(std::ostream& os) override;
-		void AttachShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
+		void CompileShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
 			std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override;
+		void CreateHwShader(
+			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override;
 
 		std::vector<uint8_t> const& ShaderCodeBlob() const
 		{
@@ -144,8 +146,6 @@ namespace KlayGE
 	private:
 		std::string_view GetShaderProfile(RenderEffect const& effect, uint32_t shader_desc_id) const override;
 		void FillCBufferIndices(RenderEffect const& effect);
-		void CreateHwShader(
-			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override;
 		virtual void ClearHwShader() = 0;
 
 #if KLAYGE_IS_DEV_PLATFORM
@@ -186,7 +186,7 @@ namespace KlayGE
 	private:
 		void ClearHwShader() override;
 
-		void StageSpecificStreamIn(std::istream& native_shader_stream) override;
+		void StageSpecificStreamIn(ResIdentifier& res) override;
 		void StageSpecificStreamOut(std::ostream& os) override;
 #if KLAYGE_IS_DEV_PLATFORM
 		void StageSpecificReflection(ID3D11ShaderReflection* reflection) override;
@@ -273,7 +273,7 @@ namespace KlayGE
 		void StageSpecificCreateHwShader(
 			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override;
 
-		void StageSpecificStreamIn(std::istream& native_shader_stream) override;
+		void StageSpecificStreamIn(ResIdentifier& res) override;
 		void StageSpecificStreamOut(std::ostream& os) override;
 #if KLAYGE_IS_DEV_PLATFORM
 		void StageSpecificReflection(ID3D11ShaderReflection* reflection) override;

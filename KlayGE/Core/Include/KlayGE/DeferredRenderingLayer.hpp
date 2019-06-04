@@ -57,7 +57,8 @@ namespace KlayGE
 		VPAM_NoTransparencyFront = 1UL << 3,
 		VPAM_NoSimpleForward = 1UL << 4,
 		VPAM_NoGI = 1UL << 5,
-		VPAM_NoSSVO = 1UL << 6
+		VPAM_NoSSVO = 1UL << 6,
+		VPAM_NoDoF = 1UL << 7
 	};
 
 	struct PerViewport
@@ -120,6 +121,8 @@ namespace KlayGE
 		std::array<FrameBufferPtr, 2> merged_depth_resolved_fbs;
 		std::array<TexturePtr, 2> merged_depth_resolved_texs;
 		uint32_t curr_merged_buffer_index;
+
+		TexturePtr dof_tex;
 
 		TexturePtr small_ssvo_tex;
 		bool ssvo_enabled;
@@ -207,6 +210,9 @@ namespace KlayGE
 		void TranslucencyStrength(float strength);
 		void SSREnabled(bool ssr);
 		void TemporalAAEnabled(bool taa);
+		void DepthOfFieldEnabled(bool dof, bool bokeh);
+		void DepthFocus(float plane, float range);
+		void BokehLuminanceThreshold(float lum_threshold);
 
 		void AddDecal(RenderDecalPtr const & decal);
 
@@ -457,11 +463,14 @@ namespace KlayGE
 		uint32_t SpecialShadingDRJob(PerViewport& pvp, PassType pass_type);
 		uint32_t MergeShadingAndDepthDRJob(PerViewport& pvp, PassTargetBuffer pass_tb);
 		uint32_t PostEffectsDRJob(PerViewport& pvp);
-		uint32_t SimpleForwardDRJob();
+		uint32_t SimpleForwardDRJob(PerViewport& pvp);
+		uint32_t PostSimpleForwardDRJob(PerViewport& pvp);
+		uint32_t FinishingViewportDRJob(PerViewport& pvp);
 		uint32_t FinishingDRJob();
 		uint32_t SwitchViewportDRJob(uint32_t vp_index);
 		uint32_t VisualizeGBufferDRJob();
 		uint32_t VisualizeLightingDRJob();
+		uint32_t ClearOnlyDRJob();
 
 	private:
 		bool tex_array_support_;
@@ -499,6 +508,12 @@ namespace KlayGE
 
 		PostProcessPtr vdm_composition_pp_;
 
+		KlayGE::PostProcessPtr depth_of_field_pp_;
+		bool depth_of_field_enabled_ = false;
+
+		KlayGE::PostProcessPtr bokeh_filter_pp_;
+		bool bokeh_filter_enabled_ = false;
+
 		float light_scale_;
 		RenderLayoutPtr rl_cone_;
 		RenderLayoutPtr rl_pyramid_;
@@ -523,7 +538,6 @@ namespace KlayGE
 		RenderTechnique* technique_merge_shading_[2];
 		RenderTechnique* technique_merge_depth_[2];
 		RenderTechnique* technique_copy_shading_depth_;
-		RenderTechnique* technique_copy_depth_;
 #if DEFAULT_DEFERRED == TRIDITIONAL_DEFERRED
 		std::array<RenderTechnique*, LightSource::LT_NumLightTypes> technique_lights_;
 		RenderTechnique* technique_light_depth_only_;
@@ -720,6 +734,8 @@ namespace KlayGE
 		PerfRangePtr taa_pp_perf_;
 		PerfRangePtr vdm_perf_;
 		PerfRangePtr vdm_composition_pp_perf_;
+		PerfRangePtr depth_of_field_perf_;
+		PerfRangePtr bokeh_filter_perf_;
 #endif
 	};
 }

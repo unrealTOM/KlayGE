@@ -87,11 +87,12 @@ namespace KlayGE
 	public:
 		D3DShaderStageObject(ShaderStage stage, bool as_d3d12);
 
-		void StreamIn(RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids,
-			std::vector<uint8_t> const& native_shader_block) override;
+		void StreamIn(
+			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids, ResIdentifier& res) override;
 		void StreamOut(std::ostream& os) override;
-		void AttachShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
+		void CompileShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
 			std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override;
+		void CreateHwShader(RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override;
 
 		std::vector<uint8_t> const& ShaderCodeBlob() const
 		{
@@ -115,12 +116,6 @@ namespace KlayGE
 
 	private:
 		std::string_view GetShaderProfile(RenderEffect const& effect, uint32_t shader_desc_id) const override;
-		void CreateHwShader(
-			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override
-		{
-			KFL_UNUSED(effect);
-			KFL_UNUSED(shader_desc_ids);
-		}
 		void FillCBufferIndices(RenderEffect const& effect);
 
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
@@ -152,7 +147,7 @@ namespace KlayGE
 		}
 
 	private:
-		void StageSpecificStreamIn(std::istream& native_shader_stream) override;
+		void StageSpecificStreamIn(ResIdentifier& res) override;
 		void StageSpecificStreamOut(std::ostream& os) override;
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		void StageSpecificReflection(ID3D11ShaderReflection* reflection) override;
@@ -199,7 +194,7 @@ namespace KlayGE
 		}
 
 	private:
-		void StageSpecificStreamIn(std::istream& native_shader_stream) override;
+		void StageSpecificStreamIn(ResIdentifier& res) override;
 		void StageSpecificStreamOut(std::ostream& os) override;
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		void StageSpecificReflection(ID3D11ShaderReflection* reflection) override;
@@ -227,11 +222,12 @@ namespace KlayGE
 	public:
 		OGLShaderStageObject(ShaderStage stage, GLenum gl_shader_type, bool as_gles);
 
-		void StreamIn(RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids,
-			std::vector<uint8_t> const& native_shader_block) override;
+		void StreamIn(
+			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids, ResIdentifier& res) override;
 		void StreamOut(std::ostream& os) override;
-		void AttachShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
+		void CompileShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
 			std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override;
+		void CreateHwShader(RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override;
 
 		std::string const& GlslSource() const
 		{
@@ -269,12 +265,6 @@ namespace KlayGE
 
 	private:
 		std::string_view GetShaderProfile(RenderEffect const& effect, uint32_t shader_desc_id) const override;
-		void CreateHwShader(
-			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids) override
-		{
-			KFL_UNUSED(effect);
-			KFL_UNUSED(shader_desc_ids);
-		}
 
 		virtual void StageSpecificAttachShader(DXBC2GLSL::DXBC2GLSL const& dxbc2glsl)
 		{
@@ -314,7 +304,7 @@ namespace KlayGE
 		}
 
 	private:
-		void StageSpecificStreamIn(std::istream& native_shader_stream) override;
+		void StageSpecificStreamIn(ResIdentifier& res) override;
 		void StageSpecificStreamOut(std::ostream& os) override;
 		void StageSpecificAttachShader(DXBC2GLSL::DXBC2GLSL const& dxbc2glsl) override;
 
@@ -344,7 +334,7 @@ namespace KlayGE
 		OGLGeometryShaderStageObject();
 
 	private:
-		void StageSpecificStreamIn(std::istream& native_shader_stream) override;
+		void StageSpecificStreamIn(ResIdentifier& res) override;
 		void StageSpecificStreamOut(std::ostream& os) override;
 		void StageSpecificAttachShader(DXBC2GLSL::DXBC2GLSL const& dxbc2glsl) override;
 

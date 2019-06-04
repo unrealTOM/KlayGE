@@ -83,10 +83,11 @@ namespace KlayGE
 	SceneManager::~SceneManager()
 	{
 		quit_ = true;
-		(*update_thread_)();
+		if (update_thread_)
+		{
+			(*update_thread_)();
+		}
 
-		this->ClearLight();
-		this->ClearCamera();
 		this->ClearObject();
 	}
 
@@ -173,68 +174,34 @@ namespace KlayGE
 		}
 	}
 
-	void SceneManager::AddCamera(CameraPtr const & camera)
+	uint32_t SceneManager::NumFrameCameras() const
 	{
-		cameras_.push_back(camera);
-	}
-	
-	void SceneManager::DelCamera(CameraPtr const & camera)
-	{
-		auto iter = std::find(cameras_.begin(), cameras_.end(), camera);
-		cameras_.erase(iter);
+		return static_cast<uint32_t>(frame_cameras_.size());
 	}
 
-	std::vector<CameraPtr>::iterator SceneManager::DelCamera(std::vector<CameraPtr>::iterator iter)
+	Camera* SceneManager::GetFrameCamera(uint32_t index)
 	{
-		std::lock_guard<std::mutex> lock(update_mutex_);
-		return cameras_.erase(iter);
+		return frame_cameras_[index].get();
 	}
 
-	uint32_t SceneManager::NumCameras() const
+	Camera const* SceneManager::GetFrameCamera(uint32_t index) const
 	{
-		return static_cast<uint32_t>(cameras_.size());
+		return frame_cameras_[index].get();
 	}
 
-	CameraPtr& SceneManager::GetCamera(uint32_t index)
+	uint32_t SceneManager::NumFrameLights() const
 	{
-		return cameras_[index];
+		return static_cast<uint32_t>(frame_lights_.size());
 	}
 
-	CameraPtr const & SceneManager::GetCamera(uint32_t index) const
+	LightSource* SceneManager::GetFrameLight(uint32_t index)
 	{
-		return cameras_[index];
+		return frame_lights_[index].get();
 	}
 
-	void SceneManager::AddLight(LightSourcePtr const & light)
+	LightSource const* SceneManager::GetFrameLight(uint32_t index) const
 	{
-		lights_.push_back(light);
-	}
-	
-	void SceneManager::DelLight(LightSourcePtr const & light)
-	{
-		auto iter = std::find(lights_.begin(), lights_.end(), light);
-		lights_.erase(iter);
-	}
-
-	std::vector<LightSourcePtr>::iterator SceneManager::DelLight(std::vector<LightSourcePtr>::iterator iter)
-	{
-		std::lock_guard<std::mutex> lock(update_mutex_);
-		return lights_.erase(iter);
-	}
-
-	uint32_t SceneManager::NumLights() const
-	{
-		return static_cast<uint32_t>(lights_.size());
-	}
-
-	LightSourcePtr& SceneManager::GetLight(uint32_t index)
-	{
-		return lights_[index];
-	}
-
-	LightSourcePtr const & SceneManager::GetLight(uint32_t index) const
-	{
-		return lights_[index];
+		return frame_lights_[index].get();
 	}
 
 	// 加入渲染队列
@@ -357,16 +324,6 @@ namespace KlayGE
 		}
 	}
 
-	void SceneManager::ClearCamera()
-	{
-		cameras_.clear();
-	}
-
-	void SceneManager::ClearLight()
-	{
-		lights_.clear();
-	}
-
 	void SceneManager::ClearObject()
 	{
 		std::lock_guard<std::mutex> lock(update_mutex_);
@@ -396,35 +353,29 @@ namespace KlayGE
 		{
 			std::lock_guard<std::mutex> lock(update_mutex_);
 
-			scene_root_.MainThreadUpdateSubtree(app_time, frame_time);
+			scene_root_.Traverse([this, app_time, frame_time](SceneNode& node) {
+				node.MainThreadUpdate(app_time, frame_time);
+				node.UpdateTransforms();
+
+				if (node.Visible())
+				{
+					node.ForEachComponentOfType<Camera>([this](Camera& camera) {
+						frame_cameras_.push_back(camera.shared_from_this());
+					});
+
+					node.ForEachComponentOfType<LightSource>([this](LightSource& light) {
+						frame_lights_.push_back(light.shared_from_this());
+					});
+				}
+
+				return true;
+			});
 			scene_root_.UpdatePosBoundSubtree();
 
 			overlay_root_.ClearChildren();
-			for (auto iter = lights_.begin(); iter != lights_.end();)
-			{
-				if ((*iter)->Attrib() & LightSource::LSA_Temporary)
-				{
-					iter = this->DelLight(iter);
-				}
-				else
-				{
-					++ iter;
-				}
-			}
 		}
 
-		for (auto const & camera : cameras_)
-		{
-			camera->Update(app_time, frame_time);
-		}
-
-		for (auto const & light : lights_)
-		{
-			if (light->Enabled())
-			{
-				light->Update(app_time, frame_time);
-			}
-		}
+		nodes_updated_ = true;
 
 		this->FlushScene();
 
@@ -434,9 +385,14 @@ namespace KlayGE
 		InputEngine& ie = Context::Instance().InputFactoryInstance().InputEngineInstance();
 		ie.Update();
 
+		frame_cameras_.clear();
+		frame_lights_.clear();
+
 		fb.WaitOnSwapBuffers();
 
 		re.EndFrame();
+
+		nodes_updated_ = false;
 	}
 
 	// 把渲染队列中的物体渲染出来
@@ -471,7 +427,7 @@ namespace KlayGE
 		Camera& camera = app.ActiveCamera();
 		auto& scene_nodes = (urt & App3DFramework::URV_Overlay) ? all_overlay_nodes_ : all_scene_nodes_;
 
-		for (auto const & node : scene_nodes)
+		for (auto* node : scene_nodes)
 		{
 			node->VisibleMark(BO_No);
 		}
@@ -535,14 +491,12 @@ namespace KlayGE
 			}
 		}
 
-		for (auto const & node : scene_nodes)
+		for (auto* node : scene_nodes)
 		{
 			if (node->VisibleMark() != BO_No)
 			{
-				node->ForEachRenderable([](Renderable& renderable)
-					{
-						renderable.ClearInstances();
-					});
+				node->ForEachComponentOfType<RenderableComponent>(
+					[](RenderableComponent& renderable_comp) { renderable_comp.BoundRenderable().ClearInstances(); });
 			}
 		}
 
@@ -550,17 +504,17 @@ namespace KlayGE
 		{
 			if (node->VisibleMark() != BO_No)
 			{
-				node->ForEachRenderable([node](Renderable& renderable)
+				node->ForEachComponentOfType<RenderableComponent>([node](RenderableComponent& renderable_comp) {
+					auto& renderable = renderable_comp.BoundRenderable();
+					if (renderable_comp.Enabled() && (renderable.GetRenderTechnique() != nullptr))
 					{
-						if (renderable.Enabled() && (renderable.GetRenderTechnique() != nullptr))
+						if (0 == renderable.NumInstances())
 						{
-							if (0 == renderable.NumInstances())
-							{
-								renderable.AddToRenderQueue();
-							}
-							renderable.AddInstance(node);
+							renderable.AddToRenderQueue();
 						}
-					});
+						renderable.AddInstance(node);
+					}
+				});
 
 				++ num_objects_rendered_;
 			}
@@ -728,8 +682,12 @@ namespace KlayGE
 				{
 					std::lock_guard<std::mutex> lock(update_mutex_);
 
-					scene_root_.SubThreadUpdateSubtree(app_time, frame_time);
-					overlay_root_.SubThreadUpdateSubtree(app_time, frame_time);
+					auto updater = [app_time, frame_time](SceneNode& node) {
+						node.SubThreadUpdate(app_time, frame_time);
+						return true;
+					};
+					scene_root_.Traverse(updater);
+					overlay_root_.Traverse(updater);
 				}
 
 				if (frame_time < update_elapse_)

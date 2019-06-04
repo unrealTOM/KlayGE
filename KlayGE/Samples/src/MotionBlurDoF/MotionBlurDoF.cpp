@@ -20,6 +20,7 @@
 #include <KlayGE/Script.hpp>
 #include <KlayGE/Camera.hpp>
 #include <KlayGE/MotionBlur.hpp>
+#include <KlayGE/DepthOfField.hpp>
 
 #include <KlayGE/RenderFactory.hpp>
 #include <KlayGE/InputFactory.hpp>
@@ -198,7 +199,7 @@ namespace
 		}
 	};
 
-	class Teapot : public SceneNode
+	class Teapot
 	{
 	private:
 		struct InstData
@@ -209,437 +210,58 @@ namespace
 		};
 
 	public:
-		Teapot()
-			: SceneNode(SOA_Moveable | SOA_Cullable)
+		Teapot() : node_(MakeSharedPtr<SceneNode>(L"TeapotNode", SceneNode::SOA_Moveable | SceneNode::SOA_Cullable))
 		{
-			this->AddRenderable(RenderablePtr());
+			auto& instance_format = node_->InstanceFormat();
+			instance_format.assign({
+				VertexElement(VEU_TextureCoord, 1, EF_ABGR32F),
+				VertexElement(VEU_TextureCoord, 2, EF_ABGR32F),
+				VertexElement(VEU_TextureCoord, 3, EF_ABGR32F),
+				VertexElement(VEU_TextureCoord, 4, EF_ABGR32F),
+				VertexElement(VEU_TextureCoord, 5, EF_ABGR32F),
+				VertexElement(VEU_TextureCoord, 6, EF_ABGR32F),
+				VertexElement(VEU_Diffuse, 0, EF_ABGR8)
+			});
 
-			instance_format_.push_back(VertexElement(VEU_TextureCoord, 1, EF_ABGR32F));
-			instance_format_.push_back(VertexElement(VEU_TextureCoord, 2, EF_ABGR32F));
-			instance_format_.push_back(VertexElement(VEU_TextureCoord, 3, EF_ABGR32F));
-			instance_format_.push_back(VertexElement(VEU_TextureCoord, 4, EF_ABGR32F));
-			instance_format_.push_back(VertexElement(VEU_TextureCoord, 5, EF_ABGR32F));
-			instance_format_.push_back(VertexElement(VEU_TextureCoord, 6, EF_ABGR32F));
-			instance_format_.push_back(VertexElement(VEU_Diffuse, 0, EF_ABGR8));
+			node_->InstanceData(&inst_);
 
-			this->OnMainThreadUpdate().Connect([this](float app_time, float elapsed_time)
+			node_->OnMainThreadUpdate().Connect([this](SceneNode& node, float app_time, float elapsed_time)
 				{
+					KFL_UNUSED(node);
 					KFL_UNUSED(app_time);
 
-					this->MainThreadUpdateFunc(elapsed_time);
+					last_xform_to_parent_ = node.TransformToParent();
+
+					float4x4 mat_t = MathLib::transpose(last_xform_to_parent_);
+					inst_.last_mat[0] = mat_t.Row(0);
+					inst_.last_mat[1] = mat_t.Row(1);
+					inst_.last_mat[2] = mat_t.Row(2);
+
+					float e = elapsed_time * 0.3f * -node.TransformToParent()(3, 1);
+					node.TransformToParent(node.TransformToParent() * MathLib::rotation_y(e));
+
+					mat_t = MathLib::transpose(node.TransformToParent());
+					inst_.mat[0] = mat_t.Row(0);
+					inst_.mat[1] = mat_t.Row(1);
+					inst_.mat[2] = mat_t.Row(2);
 				});
 		}
 
 		void Instance(float4x4 const & mat, Color const & clr)
 		{
-			xform_to_parent_ = mat;
+			node_->TransformToParent(mat);
 			inst_.clr = clr.ABGR();
 		}
 
-		void const * InstanceData() const
+		SceneNodePtr const& RootNode() const
 		{
-			return &inst_;
-		}
-
-		void MainThreadUpdateFunc(float elapsed_time)
-		{
-			last_xform_to_parent_ = xform_to_parent_;
-
-			float4x4 mat_t = MathLib::transpose(last_xform_to_parent_);
-			inst_.last_mat[0] = mat_t.Row(0);
-			inst_.last_mat[1] = mat_t.Row(1);
-			inst_.last_mat[2] = mat_t.Row(2);
-
-			float e = elapsed_time * 0.3f * -xform_to_parent_(3, 1);
-			xform_to_parent_ *= MathLib::rotation_y(e);
-
-			mat_t = MathLib::transpose(xform_to_parent_);
-			inst_.mat[0] = mat_t.Row(0);
-			inst_.mat[1] = mat_t.Row(1);
-			inst_.mat[2] = mat_t.Row(2);
+			return node_;
 		}
 
 	private:
+		SceneNodePtr node_;
 		InstData inst_;
 		float4x4 last_xform_to_parent_;
-	};
-
-
-	class DepthOfField : public PostProcess
-	{
-	public:
-		DepthOfField()
-			: PostProcess(L"DepthOfField", false,
-				{},
-				{ "color_tex", "depth_tex" },
-				{ "output" },
-				RenderEffectPtr(), nullptr),
-				max_radius_(8), show_blur_factor_(false)
-		{
-			RenderDeviceCaps const & caps = Context::Instance().RenderFactoryInstance().RenderEngineInstance().DeviceCaps();
-			cs_support_ = caps.cs_support && (caps.max_shader_model >= ShaderModel(5, 0));
-
-			RenderEffectPtr effect = SyncLoadRenderEffect("DepthOfFieldPP.fxml");
-			this->Technique(effect, effect->TechniqueByName("DepthOfFieldNormalization"));
-
-			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-			spread_fb_ = rf.MakeFrameBuffer();
-
-			if (cs_support_)
-			{
-				spreading_pp_ = SyncLoadPostProcess("DepthOfField.ppml", "spreading_cs");
-			}
-			else
-			{
-				spreading_pp_ = SyncLoadPostProcess("DepthOfField.ppml", "spreading");
-			}
-			spreading_pp_->SetParam(1, static_cast<float>(max_radius_));
-
-			if (cs_support_)
-			{
-				sat_pp_ = MakeSharedPtr<SATPostProcessCS>();
-			}
-			else
-			{
-				sat_pp_ = MakeSharedPtr<SATPostProcess>();
-			}
-
-			normalization_rl_ = rf.MakeRenderLayout();
-			normalization_rl_->TopologyType(RenderLayout::TT_TriangleStrip);
-		}
-
-		void FocusPlane(float focus_plane)
-		{
-			focus_plane_ = focus_plane;
-		}
-		float FocusPlane() const
-		{
-			return focus_plane_;
-		}
-
-		void FocusRange(float focus_range)
-		{
-			focus_range_ = focus_range;
-		}
-		float FocusRange() const
-		{
-			return focus_range_;
-		}
-
-		void ShowBlurFactor(bool show)
-		{
-			show_blur_factor_ = show;
-			if (show_blur_factor_)
-			{
-				technique_ = effect_->TechniqueByName("DepthOfFieldBlurFactor");
-			}
-			else
-			{
-				technique_ = effect_->TechniqueByName("DepthOfFieldNormalization");
-			}
-		}
-		bool ShowBlurFactor() const
-		{
-			return show_blur_factor_;
-		}
-
-		void InputPin(uint32_t index, TexturePtr const & tex)
-		{
-			PostProcess::InputPin(index, tex);
-
-			if (0 == index)
-			{
-				uint32_t const width = tex->Width(0) + max_radius_ * 4 + 1;
-				uint32_t const height = tex->Height(0) + max_radius_ * 4 + 1;
-
-				auto const & caps = Context::Instance().RenderFactoryInstance().RenderEngineInstance().DeviceCaps();
-				auto const fmt = caps.BestMatchTextureRenderTargetFormat({ EF_ABGR32F, EF_ABGR16F }, 1, 0);
-				BOOST_ASSERT(fmt != EF_Unknown);
-
-				RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-				spread_tex_ = rf.MakeTexture2D(width, height, 1, 1, fmt, 1, 0,
-					EAH_GPU_Read | EAH_GPU_Write | (cs_support_ ? EAH_GPU_Unordered : 0));
-				spread_fb_->Attach(FrameBuffer::Attachment::Color0, rf.Make2DRtv(spread_tex_, 0, 1, 0));
-
-				spreading_pp_->SetParam(0, float4(static_cast<float>(width),
-					static_cast<float>(height), 1.0f / width, 1.0f / height));
-				spreading_pp_->OutputPin(0, spread_tex_);
-
-				{
-					float4 pos[] =
-					{
-						float4(-1, +1, 0 + (max_radius_ * 2 + 0.0f) / width, 0 + (max_radius_ * 2 + 0.0f) / height),
-						float4(+1, +1, 1 - (max_radius_ * 2 + 1.0f) / width, 0 + (max_radius_ * 2 + 0.0f) / height),
-						float4(-1, -1, 0 + (max_radius_ * 2 + 0.0f) / width, 1 - (max_radius_ * 2 + 1.0f) / height),
-						float4(+1, -1, 1 - (max_radius_ * 2 + 1.0f) / width, 1 - (max_radius_ * 2 + 1.0f) / height)
-					};
-				
-					GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(pos), &pos[0]);
-					normalization_rl_->BindVertexStream(pos_vb, VertexElement(VEU_Position, 0, EF_ABGR32F));
-				}
-
-				sat_pp_->InputPin(0, spread_tex_);
-				sat_pp_->OutputPin(0, spread_tex_);
-			}
-		}
-
-		using PostProcess::InputPin;
-
-		void Apply()
-		{
-			if (show_blur_factor_)
-			{
-				*(effect_->ParameterByName("focus_plane_inv_range")) = float2(-focus_plane_ / focus_range_, 1.0f / focus_range_);
-				*(effect_->ParameterByName("depth_tex")) = this->InputPin(1);
-				PostProcess::Apply();
-			}
-			else
-			{
-				RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-				spreading_pp_->SetParam(2, float2(-focus_plane_ / focus_range_, 1.0f / focus_range_));
-				spreading_pp_->InputPin(0, this->InputPin(0));
-				spreading_pp_->InputPin(1, this->InputPin(1));
-				spreading_pp_->Apply();
-
-				sat_pp_->Apply();
-
-				*(effect_->ParameterByName("src_tex")) = spread_tex_;
-
-				re.BindFrameBuffer(frame_buffer_);
-				re.Render(*effect_, *technique_, *normalization_rl_);
-			}
-		}
-
-	private:
-		PostProcessPtr sat_pp_;
-
-		bool cs_support_;
-
-		int max_radius_;
-
-		float focus_plane_;
-		float focus_range_;
-		bool show_blur_factor_;
-
-		TexturePtr spread_tex_;
-		FrameBufferPtr spread_fb_;
-
-		PostProcessPtr spreading_pp_;
-
-		RenderLayoutPtr normalization_rl_;
-	};
-
-	class BokehFilter : public PostProcess
-	{
-	public:
-		BokehFilter()
-			: PostProcess(L"BokehFilter", false,
-				{},
-				{ "color_tex", "depth_tex" },
-				{ "output" },
-				RenderEffectPtr(), nullptr),
-				max_radius_(8)
-		{
-			RenderDeviceCaps const & caps = Context::Instance().RenderFactoryInstance().RenderEngineInstance().DeviceCaps();
-			gs_support_ = caps.gs_support;
-
-			RenderEffectPtr effect = SyncLoadRenderEffect("DepthOfFieldPP.fxml");
-			if (gs_support_)
-			{
-				this->Technique(effect, effect->TechniqueByName("SeparateBokeh4"));
-			}
-			else
-			{
-				this->Technique(effect, effect->TechniqueByName("SeparateBokeh"));
-			}
-
-			*(effect->ParameterByName("max_radius")) = static_cast<float>(max_radius_);
-
-			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-			bokeh_fb_ = rf.MakeFrameBuffer();
-
-			bokeh_rl_ = rf.MakeRenderLayout();
-
-			merge_bokeh_pp_ = SyncLoadPostProcess("DepthOfField.ppml", "merge_bokeh");
-			merge_bokeh_pp_->SetParam(2, static_cast<float>(max_radius_));
-		}
-
-		void FocusPlane(float focus_plane)
-		{
-			focus_plane_ = focus_plane;
-		}
-		float FocusPlane() const
-		{
-			return focus_plane_;
-		}
-
-		void FocusRange(float focus_range)
-		{
-			focus_range_ = focus_range;
-		}
-		float FocusRange() const
-		{
-			return focus_range_;
-		}
-
-		void InputPin(uint32_t index, TexturePtr const & tex)
-		{
-			PostProcess::InputPin(index, tex);
-
-			if (0 == index)
-			{
-				uint32_t const in_width = tex->Width(0) / 2;
-				uint32_t const in_height = tex->Height(0) / 2;
-				uint32_t const out_width = in_width * 2 + max_radius_ * 4;
-				uint32_t const out_height = in_height;
-
-				*(effect_->ParameterByName("in_width_height")) = float4(static_cast<float>(in_width),
-					static_cast<float>(in_height), 1.0f / in_width, 1.0f / in_height);
-				*(effect_->ParameterByName("bokeh_width_height")) = float4(static_cast<float>(out_width),
-					static_cast<float>(out_height), 1.0f / out_width, 1.0f / out_height);
-				*(effect_->ParameterByName("background_offset")) = static_cast<float>(in_width + max_radius_ * 4);
-
-				RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-				RenderDeviceCaps const & caps = rf.RenderEngineInstance().DeviceCaps();
-				bokeh_tex_ = rf.MakeTexture2D(out_width, out_height, 1, 1, tex->Format(), 1, 0, EAH_GPU_Read | EAH_GPU_Write);
-				bokeh_fb_->Attach(FrameBuffer::Attachment::Color0, rf.Make2DRtv(bokeh_tex_, 0, 1, 0));
-
-				if (gs_support_)
-				{
-					bokeh_rl_->TopologyType(RenderLayout::TT_PointList);
-
-					std::vector<float2> points;
-					for (uint32_t y = 0; y < in_height; y += 2)
-					{
-						for (uint32_t x = 0; x < in_width; x += 2)
-						{
-							points.push_back(float2((x + 0.5f) / in_width, (y + 0.5f) / in_height));
-						}
-					}
-
-					GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
-						static_cast<uint32_t>(points.size() * sizeof(points[0])), &points[0]);
-					bokeh_rl_->BindVertexStream(pos_vb, VertexElement(VEU_Position, 0, EF_GR32F));
-				}
-				else
-				{
-					RenderEngine& re = rf.RenderEngineInstance();
-					float const flipping = re.RequiresFlipping() ? -1.0f : +1.0f;
-
-					std::vector<float4> points;
-					for (uint32_t y = 0; y < in_height; y += 2)
-					{
-						for (uint32_t x = 0; x < in_width; x += 2)
-						{
-							points.push_back(float4((x + 0.5f) / in_width, (y + 0.5f) / in_height, -1, +1 * flipping));
-							points.push_back(float4((x + 0.5f) / in_width, (y + 0.5f) / in_height, +1, +1 * flipping));
-							points.push_back(float4((x + 0.5f) / in_width, (y + 0.5f) / in_height, -1, -1 * flipping));
-							points.push_back(float4((x + 0.5f) / in_width, (y + 0.5f) / in_height, +1, -1 * flipping));
-						}
-					}
-
-					std::vector<uint32_t> indices;
-					uint32_t base = 0;
-					if (caps.primitive_restart_support)
-					{
-						bokeh_rl_->TopologyType(RenderLayout::TT_TriangleStrip);
-
-						for (uint32_t y = 0; y < in_height; y += 2)
-						{
-							for (uint32_t x = 0; x < in_width; x += 2)
-							{
-								indices.push_back(base + 0);
-								indices.push_back(base + 1);
-								indices.push_back(base + 2);
-								indices.push_back(base + 3);
-								indices.push_back(0xFFFFFFFF);
-
-								base += 4;
-							}
-						}
-					}
-					else
-					{
-						bokeh_rl_->TopologyType(RenderLayout::TT_TriangleList);
-
-						for (uint32_t y = 0; y < in_height; y += 2)
-						{
-							for (uint32_t x = 0; x < in_width; x += 2)
-							{
-								indices.push_back(base + 0);
-								indices.push_back(base + 1);
-								indices.push_back(base + 2);
-
-								indices.push_back(base + 2);
-								indices.push_back(base + 1);
-								indices.push_back(base + 3);
-
-								base += 4;
-							}
-						}
-					}
-
-					GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
-						static_cast<uint32_t>(points.size() * sizeof(points[0])), &points[0]);
-					bokeh_rl_->BindVertexStream(pos_vb, VertexElement(VEU_Position, 0, EF_ABGR32F));
-
-					GraphicsBufferPtr pos_ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
-						static_cast<uint32_t>(indices.size() * sizeof(indices[0])), &indices[0]);
-					bokeh_rl_->BindIndexStream(pos_ib, EF_R32UI);
-				}
-
-				merge_bokeh_pp_->SetParam(0, float4(static_cast<float>(in_width),
-					static_cast<float>(in_height), 1.0f / in_width, 1.0f / in_height));
-				merge_bokeh_pp_->SetParam(1, float4(static_cast<float>(out_width),
-					static_cast<float>(out_height), 1.0f / out_width, 1.0f / out_height));
-				merge_bokeh_pp_->SetParam(5, static_cast<float>(in_width + max_radius_ * 4));
-				merge_bokeh_pp_->InputPin(0, bokeh_tex_);
-			}
-			else
-			{
-				merge_bokeh_pp_->InputPin(index, tex);
-			}
-		}
-
-		using PostProcess::InputPin;
-
-		void OutputPin(uint32_t index, TexturePtr const & tex, int level, int array_index, int face)
-		{
-			merge_bokeh_pp_->OutputPin(index, tex, level, array_index, face);
-		}
-
-		using PostProcess::OutputPin;
-
-		void Apply()
-		{
-			RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-			*(effect_->ParameterByName("focus_plane_inv_range")) = float2(-focus_plane_ / focus_range_, 1.0f / focus_range_);
-			*(effect_->ParameterByName("focus_plane")) = focus_plane_;
-			*(effect_->ParameterByName("color_tex")) = this->InputPin(0);
-			*(effect_->ParameterByName("depth_tex")) = this->InputPin(1);
-
-			re.BindFrameBuffer(bokeh_fb_);
-			bokeh_fb_->Clear(FrameBuffer::CBM_Color, Color(0, 0, 0, 0), 1, 0);
-			re.Render(*effect_, *technique_, *bokeh_rl_);
-
-			merge_bokeh_pp_->SetParam(3, float2(-focus_plane_ / focus_range_, 1.0f / focus_range_));
-			merge_bokeh_pp_->SetParam(4, focus_plane_);
-			merge_bokeh_pp_->Apply();
-		}
-
-	private:
-		bool gs_support_;
-
-		int max_radius_;
-
-		float focus_plane_;
-		float focus_range_;
-
-		TexturePtr bokeh_tex_;
-		FrameBufferPtr bokeh_fb_;
-		RenderLayoutPtr bokeh_rl_;
-
-		PostProcessPtr merge_bokeh_pp_;
 	};
 
 
@@ -982,9 +604,10 @@ void MotionBlurDoFApp::MBExposureChangedHandler(KlayGE::UISlider const & sender)
 	stream << "Exposure: " << exposure_;
 	mb_dialog_->Control<UIStatic>(id_mb_exposure_static_)->SetText(stream.str());
 
-	for (size_t i = 0; i < scene_nodes_.size(); ++ i)
+	for (size_t i = 0; i < teapots_.size(); ++i)
 	{
-		checked_pointer_cast<MotionBlurRenderMesh>(scene_nodes_[i]->GetRenderable())->Exposure(exposure_);
+		static_pointer_cast<Teapot>(teapots_[i])->RootNode()->FirstComponentOfType<RenderableComponent>()
+			->BoundRenderableOfType<MotionBlurRenderMesh>().Exposure(exposure_);
 	}
 }
 
@@ -997,9 +620,10 @@ void MotionBlurDoFApp::MBBlurRadiusChangedHandler(KlayGE::UISlider const & sende
 	stream << "Blur Radius: " << blur_radius_;
 	mb_dialog_->Control<UIStatic>(id_mb_blur_radius_static_)->SetText(stream.str());
 
-	for (size_t i = 0; i < scene_nodes_.size(); ++ i)
+	for (size_t i = 0; i < teapots_.size(); ++i)
 	{
-		checked_pointer_cast<MotionBlurRenderMesh>(scene_nodes_[i]->GetRenderable())->BlurRadius(blur_radius_);
+		static_pointer_cast<Teapot>(teapots_[i])->RootNode()->FirstComponentOfType<RenderableComponent>()
+			->BoundRenderableOfType<MotionBlurRenderMesh>().BlurRadius(blur_radius_);
 	}
 }
 
@@ -1024,18 +648,20 @@ void MotionBlurDoFApp::UseInstancingHandler(UICheckBox const & /*sender*/)
 
 	if (use_instance_)
 	{
-		for (size_t i = 0; i < scene_nodes_.size(); ++ i)
+		for (size_t i = 0; i < teapots_.size(); ++i)
 		{
-			checked_pointer_cast<Teapot>(scene_nodes_[i])->ClearRenderables();
-			checked_pointer_cast<Teapot>(scene_nodes_[i])->AddRenderable(renderInstance_);
+			auto& node = *static_pointer_cast<Teapot>(teapots_[i])->RootNode();
+			node.ClearComponents();
+			node.AddComponent(MakeSharedPtr<RenderableComponent>(renderInstance_));
 		}
 	}
 	else
 	{
-		for (size_t i = 0; i < scene_nodes_.size(); ++ i)
+		for (size_t i = 0; i < teapots_.size(); ++i)
 		{
-			checked_pointer_cast<Teapot>(scene_nodes_[i])->ClearRenderables();
-			checked_pointer_cast<Teapot>(scene_nodes_[i])->AddRenderable(renderMesh_);
+			auto& node = *static_pointer_cast<Teapot>(teapots_[i])->RootNode();
+			node.ClearComponents();
+			node.AddComponent(MakeSharedPtr<RenderableComponent>(renderMesh_));
 		}
 	}
 }
@@ -1131,20 +757,20 @@ uint32_t MotionBlurDoFApp::DoUpdate(uint32_t pass)
 						LogWarn() << "Wrong callings to script engine" << std::endl;
 					}
 
-					auto so = MakeSharedPtr<Teapot>();
-					checked_pointer_cast<Teapot>(so)->Instance(MathLib::translation(pos), clr);
+					auto teapot = MakeSharedPtr<Teapot>();
+					teapot->Instance(MathLib::translation(pos), clr);
 
-					checked_pointer_cast<Teapot>(so)->ClearRenderables();
-					checked_pointer_cast<Teapot>(so)->AddRenderable(renderInstance_);
-					checked_pointer_cast<MotionBlurRenderMesh>(so->GetRenderable())->Exposure(exposure_);
-					checked_pointer_cast<MotionBlurRenderMesh>(so->GetRenderable())->BlurRadius(blur_radius_);
-					scene_nodes_.push_back(so);
+					teapot->RootNode()->ClearComponents();
+					teapot->RootNode()->AddComponent(MakeSharedPtr<RenderableComponent>(renderInstance_));
+					checked_cast<MotionBlurRenderMesh&>(*renderInstance_).Exposure(exposure_);
+					checked_cast<MotionBlurRenderMesh&>(*renderInstance_).BlurRadius(blur_radius_);
+					teapots_.push_back(teapot);
 
-					so->SubThreadUpdate(0, 0);
-					so->MainThreadUpdate(0, 0);
+					teapot->RootNode()->SubThreadUpdate(0, 0);
+					teapot->RootNode()->MainThreadUpdate(0, 0);
 
 					std::lock_guard<std::mutex> lock(scene_mgr.MutexForUpdate());
-					scene_mgr.SceneRootNode().AddChild(so);
+					scene_mgr.SceneRootNode().AddChild(teapot->RootNode());
 				}
 
 				++ loading_percentage_;
@@ -1166,7 +792,7 @@ uint32_t MotionBlurDoFApp::DoUpdate(uint32_t pass)
 		{
 			Camera& camera = this->ActiveCamera();
 
-			camera.Update(app.AppTime(), app.FrameTime());
+			camera.MainThreadUpdate(app.AppTime(), app.FrameTime());
 
 			if (depth_texture_support_)
 			{
@@ -1185,9 +811,10 @@ uint32_t MotionBlurDoFApp::DoUpdate(uint32_t pass)
 			}
 			re.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, clear_clr, 1.0f, 0);
 		}
-		for (size_t i = 0; i < scene_nodes_.size(); ++ i)
+		for (size_t i = 0; i < teapots_.size(); ++i)
 		{
-			checked_pointer_cast<MotionBlurRenderMesh>(scene_nodes_[i]->GetRenderable())->VelocityPass(false);
+			static_pointer_cast<Teapot>(teapots_[i])->RootNode()->FirstComponentOfType<RenderableComponent>()
+				->BoundRenderableOfType<MotionBlurRenderMesh>().VelocityPass(false);
 		}
 		return App3DFramework::URV_NeedFlush;
 
@@ -1199,9 +826,10 @@ uint32_t MotionBlurDoFApp::DoUpdate(uint32_t pass)
 
 		re.BindFrameBuffer(velocity_fb_);
 		re.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, Color(0.5f, 0.5f, 0.5f, 1), 1.0f, 0);
-		for (size_t i = 0; i < scene_nodes_.size(); ++ i)
+		for (size_t i = 0; i < teapots_.size(); ++i)
 		{
-			checked_pointer_cast<MotionBlurRenderMesh>(scene_nodes_[i]->GetRenderable())->VelocityPass(true);
+			static_pointer_cast<Teapot>(teapots_[i])->RootNode()->FirstComponentOfType<RenderableComponent>()
+				->BoundRenderableOfType<MotionBlurRenderMesh>().VelocityPass(true);
 		}
 		return App3DFramework::URV_NeedFlush;
 

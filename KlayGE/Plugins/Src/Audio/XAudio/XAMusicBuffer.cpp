@@ -99,7 +99,7 @@ namespace KlayGE
 		audio_data_.resize(wfx.nAvgBytesPerSec * buffer_seconds);
 		buffer_size_ = wfx.nAvgBytesPerSec / BUFFERS_PER_SECOND;
 
-		auto const & ae = *checked_cast<XAAudioEngine const *>(&Context::Instance().AudioFactoryInstance().AudioEngineInstance());
+		auto const& ae = checked_cast<XAAudioEngine const&>(Context::Instance().AudioFactoryInstance().AudioEngineInstance());
 
 		auto xaudio = ae.XAudio();
 
@@ -150,8 +150,7 @@ namespace KlayGE
 					break;
 				}
 
-				::WaitForSingleObjectEx(checked_cast<MusicVoiceContext*>(voice_call_back_.get())->GetBufferEndEvent(),
-					INFINITE, FALSE);
+				::WaitForSingleObjectEx(checked_cast<MusicVoiceContext&>(*voice_call_back_).GetBufferEndEvent(), INFINITE, FALSE);
 			}
 
 			if (this->FillData(buffer_size_))
@@ -182,7 +181,7 @@ namespace KlayGE
 
 	void XAMusicBuffer::DoPlay(bool loop)
 	{
-		auto const & ae = *checked_cast<XAAudioEngine const *>(&Context::Instance().AudioFactoryInstance().AudioEngineInstance());
+		auto const& ae = checked_cast<XAAudioEngine const&>(Context::Instance().AudioFactoryInstance().AudioEngineInstance());
 
 		ae.X3DAudioCalculate(&emitter_, X3DAUDIO_CALCULATE_MATRIX | X3DAUDIO_CALCULATE_DOPPLER, &dsp_settings_);
 
@@ -209,7 +208,7 @@ namespace KlayGE
 		if (!stopped_)
 		{
 			stopped_ = true;
-			::SetEvent(checked_cast<MusicVoiceContext*>(voice_call_back_.get())->GetBufferEndEvent());
+			::SetEvent(checked_cast<MusicVoiceContext&>(*voice_call_back_).GetBufferEndEvent());
 			play_thread_();
 		}
 

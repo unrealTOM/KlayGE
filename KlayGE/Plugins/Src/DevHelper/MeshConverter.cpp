@@ -457,7 +457,6 @@ namespace
 			{
 				aiString str;
 				aiGetMaterialTexture(mtl, aiTextureType_DIFFUSE, 0, &str, 0, 0, 0, 0, 0, 0);
-
 				render_mtl.tex_names[RenderMaterial::TS_Albedo] = str.C_Str();
 			}
 
@@ -466,8 +465,7 @@ namespace
 			{
 				aiString str;
 				aiGetMaterialTexture(mtl, AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_METALLICROUGHNESS_TEXTURE, &str, 0, 0, 0, 0, 0, 0);
-
-				render_mtl.tex_names[RenderMaterial::TS_Glossiness] = str.C_Str();
+				render_mtl.tex_names[RenderMaterial::TS_MetalnessGlossiness] = str.C_Str();
 			}
 			else
 			{
@@ -476,8 +474,7 @@ namespace
 				{
 					aiString str;
 					aiGetMaterialTexture(mtl, aiTextureType_SHININESS, 0, &str, 0, 0, 0, 0, 0, 0);
-
-					render_mtl.tex_names[RenderMaterial::TS_Glossiness] = str.C_Str();
+					render_mtl.tex_names[RenderMaterial::TS_MetalnessGlossiness] = str.C_Str();
 				}
 			}
 
@@ -486,7 +483,6 @@ namespace
 			{
 				aiString str;
 				aiGetMaterialTexture(mtl, aiTextureType_EMISSIVE, 0, &str, 0, 0, 0, 0, 0, 0);
-
 				render_mtl.tex_names[RenderMaterial::TS_Emissive] = str.C_Str();
 			}
 
@@ -495,8 +491,9 @@ namespace
 			{
 				aiString str;
 				aiGetMaterialTexture(mtl, aiTextureType_NORMALS, 0, &str, 0, 0, 0, 0, 0, 0);
-
 				render_mtl.tex_names[RenderMaterial::TS_Normal] = str.C_Str();
+
+				aiGetMaterialFloat(mtl, AI_MATKEY_GLTF_TEXTURE_SCALE(aiTextureType_NORMALS, 0), &render_mtl.normal_scale);
 			}
 
 			count = aiGetMaterialTextureCount(mtl, aiTextureType_HEIGHT);
@@ -504,8 +501,17 @@ namespace
 			{
 				aiString str;
 				aiGetMaterialTexture(mtl, aiTextureType_HEIGHT, 0, &str, 0, 0, 0, 0, 0, 0);
-
 				render_mtl.tex_names[RenderMaterial::TS_Height] = str.C_Str();
+			}
+
+			count = aiGetMaterialTextureCount(mtl, aiTextureType_LIGHTMAP);
+			if (count > 0)
+			{
+				aiString str;
+				aiGetMaterialTexture(mtl, aiTextureType_LIGHTMAP, 0, &str, 0, 0, 0, 0, 0, 0);
+				render_mtl.tex_names[RenderMaterial::TS_Occlusion] = str.C_Str();
+
+				aiGetMaterialFloat(mtl, AI_MATKEY_GLTF_TEXTURE_STRENGTH(aiTextureType_LIGHTMAP, 0), &render_mtl.occlusion_strength);
 			}
 
 			render_mtl.detail_mode = RenderMaterial::SDM_Parallax;
@@ -790,7 +796,7 @@ namespace
 
 	void MeshLoader::BuildActions(aiScene const * scene)
 	{
-		auto& skinned_model = *checked_pointer_cast<SkinnedModel>(render_model_);
+		auto& skinned_model = checked_cast<SkinnedModel&>(*render_model_);
 
 		struct Animation
 		{
@@ -1216,10 +1222,10 @@ namespace
 					}
 				}
 
-				if (!mtl.tex_names[RenderMaterial::TS_Glossiness].empty())
+				if (!mtl.tex_names[RenderMaterial::TS_MetalnessGlossiness].empty())
 				{
 					aiString name;
-					name.Set(mtl.tex_names[RenderMaterial::TS_Glossiness]);
+					name.Set(mtl.tex_names[RenderMaterial::TS_MetalnessGlossiness]);
 					if (is_gltf)
 					{
 						ai_mtl.AddProperty(&name, _AI_MATKEY_TEXTURE_BASE, AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_METALLICROUGHNESS_TEXTURE);
@@ -1262,7 +1268,7 @@ namespace
 			ai_scene.mMeshes = new aiMesh*[ai_scene.mNumMeshes];
 			for (uint32_t i = 0; i < ai_scene.mNumMeshes; ++ i)
 			{
-				auto const & mesh = *checked_cast<StaticMesh*>(model.Mesh(i).get());
+				auto const& mesh = checked_cast<StaticMesh const&>(*model.Mesh(i));
 
 				ai_scene.mMeshes[i] = new aiMesh;
 				auto& ai_mesh = *ai_scene.mMeshes[i];
@@ -1580,23 +1586,24 @@ namespace
 
 						ai_node.mNumChildren = static_cast<uint32_t>(node.Children().size());
 						ai_node.mChildren = ai_node.mNumChildren > 0 ? new aiNode*[ai_node.mNumChildren] : nullptr;
-						ai_node.mNumMeshes = node.NumRenderables();
+						ai_node.mNumMeshes = node.NumComponentsOfType<RenderableComponent>();
 						ai_node.mMeshes = ai_node.mNumMeshes > 0 ? new unsigned int[ai_node.mNumMeshes] : nullptr;
 
-						for (uint32_t i = 0; i < node.NumRenderables(); ++ i)
-						{
-							auto const & mesh = node.GetRenderable(i);
-							for (uint32_t j = 0; j < model.NumMeshes(); ++ j)
+						uint32_t mesh_index = 0;
+						node.ForEachComponentOfType<RenderableComponent>([&model, &ai_node, &mesh_index](RenderableComponent& renderable_comp) {
+							auto const* mesh = &renderable_comp.BoundRenderable();
+							for (uint32_t j = 0; j < model.NumMeshes(); ++j)
 							{
-								if (mesh == model.Mesh(j))
+								if (mesh == model.Mesh(j).get())
 								{
-									ai_node.mMeshes[i] = j;
+									ai_node.mMeshes[mesh_index] = j;
+									++mesh_index;
 									break;
 								}
 							}
-						}
+						});
 
-						for (uint32_t i = 0; i < node.Children().size(); ++ i)
+						for (uint32_t i = 0; i < ai_node.mNumChildren; ++i)
 						{
 							ai_node.mChildren[i] = new aiNode;
 							ai_node.mChildren[i]->mParent = &ai_node;
@@ -1723,43 +1730,65 @@ namespace
 				}
 			}
 
-			XMLNodePtr metalness_node = mtl_node->FirstNode("metalness");
-			if (metalness_node)
+			XMLNodePtr metalness_glossiness_node = mtl_node->FirstNode("metalness_glossiness");
+			if (metalness_glossiness_node)
 			{
-				XMLAttributePtr attr = metalness_node->Attrib("value");
+				XMLAttributePtr attr = metalness_glossiness_node->Attrib("metalness");
 				if (attr)
 				{
 					mtl.metalness = attr->ValueFloat();
 				}
-				attr = metalness_node->Attrib("texture");
-				if (attr)
-				{
-					mtl.tex_names[RenderMaterial::TS_Metalness] = std::string(attr->ValueString());
-				}
-			}
-
-			XMLNodePtr glossiness_node = mtl_node->FirstNode("glossiness");
-			if (glossiness_node)
-			{
-				XMLAttributePtr attr = glossiness_node->Attrib("value");
+				attr = metalness_glossiness_node->Attrib("glossiness");
 				if (attr)
 				{
 					mtl.glossiness = attr->ValueFloat();
 				}
-				attr = glossiness_node->Attrib("texture");
+				attr = metalness_glossiness_node->Attrib("texture");
 				if (attr)
 				{
-					mtl.tex_names[RenderMaterial::TS_Glossiness] = std::string(attr->ValueString());
+					mtl.tex_names[RenderMaterial::TS_MetalnessGlossiness] = std::string(attr->ValueString());
 				}
 			}
 			else
 			{
-				XMLAttributePtr attr = mtl_node->Attrib("shininess");
-				if (attr)
+				XMLNodePtr metalness_node = mtl_node->FirstNode("metalness");
+				if (metalness_node)
 				{
-					float shininess = mtl_node->Attrib("shininess")->ValueFloat();
-					shininess = MathLib::clamp(shininess, 1.0f, MAX_SHININESS);
-					mtl.glossiness = Shininess2Glossiness(shininess);
+					XMLAttributePtr attr = metalness_node->Attrib("value");
+					if (attr)
+					{
+						mtl.metalness = attr->ValueFloat();
+					}
+					attr = metalness_node->Attrib("texture");
+					if (attr)
+					{
+						mtl.tex_names[RenderMaterial::TS_MetalnessGlossiness] = std::string(attr->ValueString());
+					}
+				}
+
+				XMLNodePtr glossiness_node = mtl_node->FirstNode("glossiness");
+				if (glossiness_node)
+				{
+					XMLAttributePtr attr = glossiness_node->Attrib("value");
+					if (attr)
+					{
+						mtl.glossiness = attr->ValueFloat();
+					}
+					attr = glossiness_node->Attrib("texture");
+					if (attr)
+					{
+						mtl.tex_names[RenderMaterial::TS_MetalnessGlossiness] = std::string(attr->ValueString());
+					}
+				}
+				else
+				{
+					XMLAttributePtr attr = mtl_node->Attrib("shininess");
+					if (attr)
+					{
+						float shininess = mtl_node->Attrib("shininess")->ValueFloat();
+						shininess = MathLib::clamp(shininess, 1.0f, MAX_SHININESS);
+						mtl.glossiness = Shininess2Glossiness(shininess);
+					}
 				}
 			}
 
@@ -1991,13 +2020,10 @@ namespace
 					{
 						mtl.tex_names[RenderMaterial::TS_Albedo] = name;
 					}
-					else if (CT_HASH("Metalness") == type_hash)
+					else if ((CT_HASH("MetalnessGlossiness") == type_hash) || (CT_HASH("Metalness") == type_hash) ||
+							 (CT_HASH("Glossiness") == type_hash) || (CT_HASH("Reflection Glossiness Map") == type_hash))
 					{
-						mtl.tex_names[RenderMaterial::TS_Metalness] = name;
-					}
-					else if ((CT_HASH("Glossiness") == type_hash) || (CT_HASH("Reflection Glossiness Map") == type_hash))
-					{
-						mtl.tex_names[RenderMaterial::TS_Glossiness] = name;
+						mtl.tex_names[RenderMaterial::TS_MetalnessGlossiness] = name;
 					}
 					else if ((CT_HASH("Self-Illumination") == type_hash) || (CT_HASH("Emissive") == type_hash))
 					{
@@ -2671,7 +2697,7 @@ namespace
 
 	void MeshLoader::CompileKeyFramesChunk(XMLNodePtr const & key_frames_chunk)
 	{
-		auto& skinned_model = *checked_pointer_cast<SkinnedModel>(render_model_);
+		auto& skinned_model = checked_cast<SkinnedModel&>(*render_model_);
 
 		XMLAttributePtr nf_attr = key_frames_chunk->Attrib("num_frames");
 		if (nf_attr)
@@ -2793,8 +2819,8 @@ namespace
 
 	void MeshLoader::CompileBBKeyFramesChunk(XMLNodePtr const & bb_kfs_chunk, uint32_t mesh_index)
 	{
-		auto& skinned_model = *checked_pointer_cast<SkinnedModel>(render_model_);
-		auto& skinned_mesh = *checked_pointer_cast<SkinnedMesh>(skinned_model.Mesh(mesh_index));
+		auto& skinned_model = checked_cast<SkinnedModel&>(*render_model_);
+		auto& skinned_mesh = checked_cast<SkinnedMesh&>(*skinned_model.Mesh(mesh_index));
 
 		auto bb_kfs = MakeSharedPtr<AABBKeyFrameSet>();
 		if (bb_kfs_chunk)
@@ -2865,7 +2891,7 @@ namespace
 
 	void MeshLoader::CompileActionsChunk(XMLNodePtr const & actions_chunk)
 	{
-		auto& skinned_model = *checked_pointer_cast<SkinnedModel>(render_model_);
+		auto& skinned_model = checked_cast<SkinnedModel&>(*render_model_);
 
 		XMLNodePtr action_node;
 		if (actions_chunk)
@@ -2944,7 +2970,7 @@ namespace
 		{
 			this->CompileKeyFramesChunk(key_frames_chunk);
 
-			auto& skinned_model = *checked_pointer_cast<SkinnedModel>(render_model_);
+			auto& skinned_model = checked_cast<SkinnedModel&>(*render_model_);
 			auto& kfs = *skinned_model.GetKeyFrameSets();
 
 			for (size_t i = 0; i < kfs.size(); ++ i)
@@ -3032,7 +3058,7 @@ namespace
 			}
 		}
 
-		auto& skinned_model = *checked_pointer_cast<SkinnedModel>(render_model_);
+		auto& skinned_model = checked_cast<SkinnedModel&>(*render_model_);
 		auto& kfs = *skinned_model.GetKeyFrameSets();
 
 		for (uint32_t ji = 0; ji < joints_.size(); ++ ji)
@@ -3192,6 +3218,15 @@ namespace
 		if (!render_model_)
 		{
 			return RenderModelPtr();
+		}
+
+		for (uint32_t i = 0; i < metadata.NumMaterials(); ++i)
+		{
+			std::string_view mtlml_name = metadata.MaterialFileName(i);
+			if (!mtlml_name.empty())
+			{
+				render_model_->GetMaterial(i) = SyncLoadRenderMaterial(metadata.MaterialFileName(i));
+			}
 		}
 
 		uint32_t const num_lods = static_cast<uint32_t>(meshes_[0].lods.size());
@@ -3541,7 +3576,7 @@ namespace
 
 		if (skinned)
 		{
-			auto& skinned_model = *checked_pointer_cast<SkinnedModel>(render_model_);
+			auto& skinned_model = checked_cast<SkinnedModel&>(*render_model_);
 
 			for (auto& joint : joints_)
 			{
@@ -3553,7 +3588,7 @@ namespace
 			// TODO: Run skinning on CPU to get the bounding box
 			for (uint32_t mesh_index = 0; mesh_index < render_meshes.size(); ++ mesh_index)
 			{
-				auto& skinned_mesh = *checked_pointer_cast<SkinnedMesh>(render_meshes[mesh_index]);
+				auto& skinned_mesh = checked_cast<SkinnedMesh&>(*render_meshes[mesh_index]);
 
 				auto frame_pos_aabbs = MakeSharedPtr<AABBKeyFrameSet>();
 
@@ -3576,7 +3611,7 @@ namespace
 		{
 			for (auto const mesh_index : node.mesh_indices)
 			{
-				node.node->AddRenderable(render_meshes[mesh_index]);
+				node.node->AddComponent(MakeSharedPtr<RenderableComponent>(render_meshes[mesh_index]));
 			}
 		}
 

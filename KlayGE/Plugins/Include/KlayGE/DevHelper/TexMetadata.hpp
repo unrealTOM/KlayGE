@@ -88,11 +88,11 @@ namespace KlayGE
 			force_srgb_ = srgb;
 		}
 
-		uint8_t ChannelMapping(uint32_t channel) const
+		int8_t ChannelMapping(uint32_t channel) const
 		{
 			return channel_mapping_[channel];
 		}
-		void ChannelMapping(uint32_t channel, uint8_t mapping)
+		void ChannelMapping(uint32_t channel, int8_t mapping)
 		{
 			channel_mapping_[channel] = mapping;
 		}
@@ -155,6 +155,22 @@ namespace KlayGE
 		{
 			bump_.scale = scale;
 		}
+		bool BumpToOcclusion() const
+		{
+			return bump_.to_occlusion;
+		}
+		void BumpToOcclusion(bool to_occlusion)
+		{
+			bump_.to_occlusion = to_occlusion;
+		}
+		float OcclusionAmplitude() const
+		{
+			return bump_.occlusion_amplitude;
+		}
+		void OcclusionAmplitude(float amplitude)
+		{
+			bump_.occlusion_amplitude = amplitude;
+		}
 
 		bool NormalToHeight() const
 		{
@@ -185,7 +201,7 @@ namespace KlayGE
 
 		ElementFormat prefered_format_ = EF_Unknown;
 		bool force_srgb_ = false;
-		uint8_t channel_mapping_[4] = { 0, 1, 2, 3 };
+		int8_t channel_mapping_[4] = { 0, 1, 2, 3 };
 		bool rgb_to_lum_ = false;
 
 		struct Mipmap
@@ -201,6 +217,8 @@ namespace KlayGE
 		{
 			bool to_normal = false;
 			float scale = 1.0f;
+			bool to_occlusion = false;
+			float occlusion_amplitude = 1.0f;
 
 			bool from_normal = false;
 			float min_z = 1e-6f;

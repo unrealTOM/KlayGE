@@ -102,8 +102,8 @@ public:
 			}
 		}
 
-		auto const & rl = checked_cast<StaticMesh*>(target->Mesh(0).get())->GetRenderLayout();
-		auto const & sanity_rl = checked_cast<StaticMesh*>(sanity_model->Mesh(0).get())->GetRenderLayout();
+		auto const& rl = checked_cast<StaticMesh&>(*target->Mesh(0)).GetRenderLayout();
+		auto const& sanity_rl = checked_cast<StaticMesh&>(*sanity_model->Mesh(0)).GetRenderLayout();
 
 		EXPECT_EQ(rl.NumVertexStreams(), sanity_rl.NumVertexStreams());
 
@@ -315,20 +315,21 @@ public:
 				float4x4 const & mat = node.TransformToWorld();
 				float4x4 const mat_it = MathLib::transpose(MathLib::inverse(mat));
 
-				node.ForEachRenderable([&](Renderable& renderable)
+				node.ForEachComponentOfType<RenderableComponent>([&](RenderableComponent& renderable_comp)
 					{
+						auto const& mesh = renderable_comp.BoundRenderableOfType<StaticMesh>();
+
 						uint32_t mesh_index = 0;
 						for (uint32_t i = 0; i < target->NumMeshes(); ++ i)
 						{
-							if (target->Mesh(i).get() == &renderable)
+							if (target->Mesh(i).get() == &mesh)
 							{
 								mesh_index = i;
 								break;
 							}
 						}
 
-						auto const & mesh = *checked_cast<StaticMesh*>(&renderable);
-						auto const & sanity_mesh = *checked_cast<StaticMesh*>(sanity_model->Mesh(mesh_index).get());
+						auto const& sanity_mesh = checked_cast<StaticMesh&>(*sanity_model->Mesh(mesh_index));
 
 						EXPECT_EQ(mesh.MaterialID(), sanity_mesh.MaterialID());
 						EXPECT_TRUE((mesh.Name() == sanity_mesh.Name()) || (node.Name() == sanity_mesh.Name()));
@@ -629,8 +630,8 @@ public:
 		EXPECT_EQ(target->IsSkinned(), sanity_model->IsSkinned());
 		if (sanity_model->IsSkinned())
 		{
-			auto& skinned_model = *checked_cast<SkinnedModel*>(target.get());
-			auto& sanity_skinned_model = *checked_cast<SkinnedModel*>(sanity_model.get());
+			auto& skinned_model = checked_cast<SkinnedModel&>(*target);
+			auto& sanity_skinned_model = checked_cast<SkinnedModel&>(*sanity_model);
 
 			EXPECT_EQ(skinned_model.NumJoints(), sanity_skinned_model.NumJoints());
 			for (uint32_t i = 0; i < sanity_skinned_model.NumJoints(); ++ i)

@@ -110,11 +110,13 @@ namespace KlayGE
 		explicit ShaderStageObject(ShaderStage stage);
 		virtual ~ShaderStageObject();
 
-		virtual void StreamIn(RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids,
-			std::vector<uint8_t> const& native_shader_block) = 0;
+		virtual void StreamIn(
+			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids, ResIdentifier& res) = 0;
 		virtual void StreamOut(std::ostream& os) = 0;
-		virtual void AttachShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
+		virtual void CompileShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
 			std::array<uint32_t, NumShaderStages> const& shader_desc_ids) = 0;
+		virtual void CreateHwShader(
+			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids) = 0;
 
 		bool Validate() const
 		{
@@ -141,6 +143,11 @@ namespace KlayGE
 			return 0;
 		}
 
+		bool HWResourceReady() const
+		{
+			return hw_res_ready_;
+		}
+
 	protected:
 		static std::vector<uint8_t> CompileToDXBC(ShaderStage stage, RenderEffect const & effect,
 			RenderTechnique const & tech, RenderPass const & pass,
@@ -150,12 +157,10 @@ namespace KlayGE
 		static std::vector<uint8_t> StripDXBC(std::vector<uint8_t> const & code, uint32_t strip_flags);
 
 		virtual std::string_view GetShaderProfile(RenderEffect const& effect, uint32_t shader_desc_id) const = 0;
-		virtual void CreateHwShader(
-			RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids) = 0;
 
-		virtual void StageSpecificStreamIn(std::istream& native_shader_stream)
+		virtual void StageSpecificStreamIn(ResIdentifier& res)
 		{
-			KFL_UNUSED(native_shader_stream);
+			KFL_UNUSED(res);
 		}
 		virtual void StageSpecificStreamOut(std::ostream& os)
 		{
@@ -172,6 +177,7 @@ namespace KlayGE
 		const ShaderStage stage_;
 
 		bool is_validate_;
+		bool hw_res_ready_ = false;
 	};
 
 	class KLAYGE_CORE_API ShaderObject : boost::noncopyable
@@ -180,15 +186,8 @@ namespace KlayGE
 		ShaderObject();
 		virtual ~ShaderObject();
 
-		void AttachStage(ShaderStage stage, ShaderStageObjectPtr const& shader_stage, RenderEffect const& effect);
+		void AttachStage(ShaderStage stage, ShaderStageObjectPtr const& shader_stage);
 		ShaderStageObjectPtr const& Stage(ShaderStage stage) const;
-
-		bool StreamIn(ResIdentifierPtr const & res, ShaderStage stage, RenderEffect const & effect,
-			std::array<uint32_t, NumShaderStages> const & shader_desc_ids);
-		void StreamOut(std::ostream& os, ShaderStage stage);
-
-		void AttachShader(ShaderStage stage, RenderEffect const& effect, RenderTechnique const& tech,
-			RenderPass const& pass, std::array<uint32_t, NumShaderStages> const& shader_desc_ids);
 
 		void LinkShaders(RenderEffect const & effect);
 		virtual ShaderObjectPtr Clone(RenderEffect const & effect) = 0;
@@ -199,6 +198,11 @@ namespace KlayGE
 		bool Validate() const
 		{
 			return is_validate_;
+		}
+
+		bool HWResourceReady() const
+		{
+			return hw_res_ready_;
 		}
 
 	protected:
@@ -218,6 +222,9 @@ namespace KlayGE
 		const std::shared_ptr<ShaderObjectTemplate> so_template_;
 		
 		bool is_validate_;
+		bool shader_stages_dirty_ = true;
+
+		bool hw_res_ready_ = false;
 	};
 }
 

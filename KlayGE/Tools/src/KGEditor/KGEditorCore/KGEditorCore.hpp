@@ -49,9 +49,7 @@ namespace KlayGE
 			float3 trf_pos;
 			float3 trf_scale;
 			Quaternion trf_rotate;
-			SceneNodePtr scene_obj;
-			SceneObjectLightSourceProxyPtr light_proxy;
-			SceneObjectCameraProxyPtr camera_proxy;
+			SceneNodePtr scene_node;
 		};
 
 	private:
@@ -191,7 +189,7 @@ namespace KlayGE
 		uint32_t selected_entity_;
 		SceneNodePtr axis_;
 		SceneNodePtr grid_;
-		SceneNodePtr sky_box_;
+		SceneNodePtr skybox_;
 		SceneNodePtr selected_bb_;
 		SceneNodePtr translation_axis_;
 		SceneNodePtr rotation_axis_;

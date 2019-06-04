@@ -121,10 +121,10 @@ namespace
 			buff_param_->Value(srv);
 			(*buffers_)[stage_].buff_srv = srv;
 
-			auto* gl_srv = checked_cast<OGLShaderResourceView*>(srv.get());
 			if (srv)
 			{
-				gl_srv->RetrieveGLTargetTexture((*gl_bind_targets_)[stage_], (*gl_bind_textures_)[stage_]);
+				auto& gl_srv = checked_cast<OGLShaderResourceView&>(*srv);
+				gl_srv.RetrieveGLTargetTexture((*gl_bind_targets_)[stage_], (*gl_bind_textures_)[stage_]);
 			}
 			else
 			{
@@ -133,7 +133,7 @@ namespace
 			}
 			(*gl_bind_samplers_)[stage_] = 0;
 
-			OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			auto& re = checked_cast<OGLRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 			re.Uniform1i(location_, stage_);
 		}
 
@@ -169,13 +169,13 @@ namespace
 
 			sampler_param_->Value((*samplers_)[stage_].sampler);
 
-			auto* gl_srv = checked_cast<OGLShaderResourceView*>(srv.get());
 			if (srv)
 			{
-				auto* gl_sampler = checked_cast<OGLSamplerStateObject*>((*samplers_)[stage_].sampler.get());
+				auto& gl_srv = checked_cast<OGLShaderResourceView&>(*srv);
+				auto& gl_sampler = checked_cast<OGLSamplerStateObject&>(*(*samplers_)[stage_].sampler);
 
-				gl_srv->RetrieveGLTargetTexture((*gl_bind_targets_)[stage_], (*gl_bind_textures_)[stage_]);
-				(*gl_bind_samplers_)[stage_] = gl_sampler->GLSampler();
+				gl_srv.RetrieveGLTargetTexture((*gl_bind_targets_)[stage_], (*gl_bind_textures_)[stage_]);
+				(*gl_bind_samplers_)[stage_] = gl_sampler.GLSampler();
 			}
 			else
 			{
@@ -184,7 +184,7 @@ namespace
 				(*gl_bind_samplers_)[stage_] = 0;
 			}
 
-			OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			auto& re = checked_cast<OGLRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 			re.Uniform1i(location_, stage_);
 		}
 
@@ -220,7 +220,7 @@ namespace
 
 	void PrintGlslError(std::string const& glsl, std::string_view info)
 	{
-		OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 
 		if (re.HackForIntel())
 		{
@@ -299,75 +299,74 @@ namespace KlayGE
 		}
 	}
 
-	void OGLShaderStageObject::StreamIn(RenderEffect const& effect,
-		std::array<uint32_t, NumShaderStages> const& shader_desc_ids, std::vector<uint8_t> const& native_shader_block)
+	void OGLShaderStageObject::StreamIn(
+		RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids, ResIdentifier& res)
 	{
+		uint32_t native_shader_block_len;
+		res.read(&native_shader_block_len, sizeof(native_shader_block_len));
+		native_shader_block_len = LE2Native(native_shader_block_len);
+
 		auto const& sd = effect.GetShaderDesc(shader_desc_ids[static_cast<uint32_t>(stage_)]);
 
 		shader_func_name_ = sd.func_name;
 
 		is_validate_ = false;
-		if (native_shader_block.size() >= 24)
+		if (native_shader_block_len >= 24)
 		{
-			MemInputStreamBuf native_shader_buff(native_shader_block.data(), native_shader_block.size());
-			std::istream native_shader_stream(&native_shader_buff);
-
 			is_validate_ = true;
 
 			uint32_t len32;
-			native_shader_stream.read(reinterpret_cast<char*>(&len32), sizeof(len32));
+			res.read(reinterpret_cast<char*>(&len32), sizeof(len32));
 			len32 = LE2Native(len32);
 			glsl_src_.resize(len32, '\0');
-			native_shader_stream.read(&glsl_src_[0], len32);
+			res.read(&glsl_src_[0], len32);
 
 			uint16_t num16;
-			native_shader_stream.read(reinterpret_cast<char*>(&num16), sizeof(num16));
+			res.read(reinterpret_cast<char*>(&num16), sizeof(num16));
 			num16 = LE2Native(num16);
 			pnames_.resize(num16);
 			for (size_t i = 0; i < num16; ++i)
 			{
 				uint8_t len8;
-				native_shader_stream.read(reinterpret_cast<char*>(&len8), sizeof(len8));
+				res.read(reinterpret_cast<char*>(&len8), sizeof(len8));
 
 				pnames_[i].resize(len8);
-				native_shader_stream.read(&pnames_[i][0], len8);
+				res.read(&pnames_[i][0], len8);
 			}
 
-			native_shader_stream.read(reinterpret_cast<char*>(&num16), sizeof(num16));
+			res.read(reinterpret_cast<char*>(&num16), sizeof(num16));
 			num16 = LE2Native(num16);
 			glsl_res_names_.resize(num16);
 			for (size_t i = 0; i < num16; ++i)
 			{
 				uint8_t len8;
-				native_shader_stream.read(reinterpret_cast<char*>(&len8), sizeof(len8));
+				res.read(reinterpret_cast<char*>(&len8), sizeof(len8));
 
 				glsl_res_names_[i].resize(len8);
-				native_shader_stream.read(&glsl_res_names_[i][0], len8);
+				res.read(&glsl_res_names_[i][0], len8);
 			}
 
-			native_shader_stream.read(reinterpret_cast<char*>(&num16), sizeof(num16));
+			res.read(reinterpret_cast<char*>(&num16), sizeof(num16));
 			num16 = LE2Native(num16);
 			for (size_t i = 0; i < num16; ++i)
 			{
 				uint8_t len8;
-				native_shader_stream.read(reinterpret_cast<char*>(&len8), sizeof(len8));
+				res.read(reinterpret_cast<char*>(&len8), sizeof(len8));
 
 				std::string tex_name;
 				tex_name.resize(len8);
-				native_shader_stream.read(&tex_name[0], len8);
+				res.read(&tex_name[0], len8);
 
-				native_shader_stream.read(reinterpret_cast<char*>(&len8), sizeof(len8));
+				res.read(reinterpret_cast<char*>(&len8), sizeof(len8));
 
 				std::string sampler_name;
 				sampler_name.resize(len8);
-				native_shader_stream.read(&sampler_name[0], len8);
+				res.read(&sampler_name[0], len8);
 
 				tex_sampler_pairs_.push_back({tex_name, sampler_name});
 			}
 
-			this->StageSpecificStreamIn(native_shader_stream);
-
-			this->CreateHwShader(effect, shader_desc_ids);
+			this->StageSpecificStreamIn(res);
 		}
 	}
 
@@ -429,7 +428,7 @@ namespace KlayGE
 		}
 	}
 
-	void OGLShaderStageObject::AttachShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
+	void OGLShaderStageObject::CompileShader(RenderEffect const& effect, RenderTechnique const& tech, RenderPass const& pass,
 		std::array<uint32_t, NumShaderStages> const& shader_desc_ids)
 	{
 		ShaderDesc const& sd = effect.GetShaderDesc(shader_desc_ids[static_cast<uint32_t>(stage_)]);
@@ -592,8 +591,6 @@ namespace KlayGE
 						}
 
 						this->StageSpecificAttachShader(dxbc2glsl);
-
-						this->CreateHwShader(effect, shader_desc_ids);
 					}
 					catch (std::exception& ex)
 					{
@@ -695,38 +692,47 @@ namespace KlayGE
 	void OGLShaderStageObject::CreateHwShader(
 		RenderEffect const& effect, std::array<uint32_t, NumShaderStages> const& shader_desc_ids)
 	{
-		char const* glsl = glsl_src_.c_str();
-		gl_shader_ = glCreateShader(gl_shader_types[static_cast<uint32_t>(stage_)]);
-		if (0 == gl_shader_)
+		if (!glsl_src_.empty())
 		{
-			is_validate_ = false;
+			char const* glsl = glsl_src_.c_str();
+			gl_shader_ = glCreateShader(gl_shader_types[static_cast<uint32_t>(stage_)]);
+			if (0 == gl_shader_)
+			{
+				is_validate_ = false;
+			}
+			else
+			{
+				glShaderSource(gl_shader_, 1, &glsl, nullptr);
+
+				glCompileShader(gl_shader_);
+
+				GLint compiled = false;
+				glGetShaderiv(gl_shader_, GL_COMPILE_STATUS, &compiled);
+				if (!compiled)
+				{
+					LogError() << "Error when compiling GLSL " << shader_func_name_ << ":" << std::endl;
+
+					GLint len = 0;
+					glGetShaderiv(gl_shader_, GL_INFO_LOG_LENGTH, &len);
+					if (len > 0)
+					{
+						std::vector<char> info(len);
+						glGetShaderInfoLog(gl_shader_, len, &len, &info[0]);
+						PrintGlslError(glsl_src_, std::string_view(info.data(), info.size()));
+					}
+
+					is_validate_ = false;
+				}
+			}
+
+			this->StageSpecificCreateHwShader(effect, shader_desc_ids);
 		}
 		else
 		{
-			glShaderSource(gl_shader_, 1, &glsl, nullptr);
-
-			glCompileShader(gl_shader_);
-
-			GLint compiled = false;
-			glGetShaderiv(gl_shader_, GL_COMPILE_STATUS, &compiled);
-			if (!compiled)
-			{
-				LogError() << "Error when compiling GLSL " << shader_func_name_ << ":" << std::endl;
-
-				GLint len = 0;
-				glGetShaderiv(gl_shader_, GL_INFO_LOG_LENGTH, &len);
-				if (len > 0)
-				{
-					std::vector<char> info(len);
-					glGetShaderInfoLog(gl_shader_, len, &len, &info[0]);
-					PrintGlslError(glsl_src_, std::string_view(info.data(), info.size()));
-				}
-
-				is_validate_ = false;
-			}
+			is_validate_ = false;
 		}
 
-		this->StageSpecificCreateHwShader(effect, shader_desc_ids);
+		hw_res_ready_ = true;
 	}
 
 
@@ -735,35 +741,35 @@ namespace KlayGE
 		is_available_ = true;
 	}
 
-	void OGLVertexShaderStageObject::StageSpecificStreamIn(std::istream& native_shader_stream)
+	void OGLVertexShaderStageObject::StageSpecificStreamIn(ResIdentifier& res)
 	{
 		uint8_t num8;
-		native_shader_stream.read(reinterpret_cast<char*>(&num8), sizeof(num8));
+		res.read(reinterpret_cast<char*>(&num8), sizeof(num8));
 		usages_.resize(num8);
 		for (size_t i = 0; i < num8; ++i)
 		{
 			uint8_t veu;
-			native_shader_stream.read(reinterpret_cast<char*>(&veu), sizeof(veu));
+			res.read(reinterpret_cast<char*>(&veu), sizeof(veu));
 
 			usages_[i] = static_cast<VertexElementUsage>(veu);
 		}
 
-		native_shader_stream.read(reinterpret_cast<char*>(&num8), sizeof(num8));
+		res.read(reinterpret_cast<char*>(&num8), sizeof(num8));
 		if (num8 > 0)
 		{
 			usage_indices_.resize(num8);
-			native_shader_stream.read(reinterpret_cast<char*>(&usage_indices_[0]), num8 * sizeof(usage_indices_[0]));
+			res.read(reinterpret_cast<char*>(&usage_indices_[0]), num8 * sizeof(usage_indices_[0]));
 		}
 
-		native_shader_stream.read(reinterpret_cast<char*>(&num8), sizeof(num8));
+		res.read(reinterpret_cast<char*>(&num8), sizeof(num8));
 		glsl_attrib_names_.resize(num8);
 		for (size_t i = 0; i < num8; ++i)
 		{
 			uint8_t len8;
-			native_shader_stream.read(reinterpret_cast<char*>(&len8), sizeof(len8));
+			res.read(reinterpret_cast<char*>(&len8), sizeof(len8));
 
 			glsl_attrib_names_[i].resize(len8);
-			native_shader_stream.read(&glsl_attrib_names_[i][0], len8);
+			res.read(&glsl_attrib_names_[i][0], len8);
 		}
 	}
 
@@ -891,15 +897,15 @@ namespace KlayGE
 		is_available_ = caps.gs_support;
 	}
 
-	void OGLGeometryShaderStageObject::StageSpecificStreamIn(std::istream& native_shader_stream)
+	void OGLGeometryShaderStageObject::StageSpecificStreamIn(ResIdentifier& res)
 	{
-		native_shader_stream.read(reinterpret_cast<char*>(&gs_input_type_), sizeof(gs_input_type_));
+		res.read(reinterpret_cast<char*>(&gs_input_type_), sizeof(gs_input_type_));
 		gs_input_type_ = LE2Native(gs_input_type_);
 
-		native_shader_stream.read(reinterpret_cast<char*>(&gs_output_type_), sizeof(gs_output_type_));
+		res.read(reinterpret_cast<char*>(&gs_output_type_), sizeof(gs_output_type_));
 		gs_output_type_ = LE2Native(gs_output_type_);
 
-		native_shader_stream.read(reinterpret_cast<char*>(&gs_max_output_vertex_), sizeof(gs_max_output_vertex_));
+		res.read(reinterpret_cast<char*>(&gs_max_output_vertex_), sizeof(gs_max_output_vertex_));
 		gs_max_output_vertex_ = LE2Native(gs_max_output_vertex_);
 	}
 
@@ -1117,12 +1123,11 @@ namespace KlayGE
 			}
 
 			{
-				auto const* vs_shader_stage =
-					checked_cast<OGLVertexShaderStageObject const*>(this->Stage(ShaderStage::Vertex).get());
-				for (size_t pi = 0; pi < vs_shader_stage->GlslAttribNames().size(); ++pi)
+				auto const& vs_shader_stage = checked_cast<OGLVertexShaderStageObject const&>(*this->Stage(ShaderStage::Vertex));
+				for (size_t pi = 0; pi < vs_shader_stage.GlslAttribNames().size(); ++pi)
 				{
-					attrib_locs_.emplace(std::make_pair(vs_shader_stage->Usages()[pi], vs_shader_stage->UsageIndices()[pi]),
-						glGetAttribLocation(glsl_program_, vs_shader_stage->GlslAttribNames()[pi].c_str()));
+					attrib_locs_.emplace(std::make_pair(vs_shader_stage.Usages()[pi], vs_shader_stage.UsageIndices()[pi]),
+						glGetAttribLocation(glsl_program_, vs_shader_stage.GlslAttribNames()[pi].c_str()));
 				}
 			}
 		}
@@ -1133,6 +1138,7 @@ namespace KlayGE
 		OGLShaderObjectPtr ret = MakeSharedPtr<OGLShaderObject>(so_template_, gl_so_template_);
 
 		ret->is_validate_ = is_validate_;
+		ret->hw_res_ready_ = hw_res_ready_;
 
 		ret->tex_sampler_binds_.resize(tex_sampler_binds_.size());
 		for (size_t i = 0; i < tex_sampler_binds_.size(); ++ i)
@@ -1249,7 +1255,7 @@ namespace KlayGE
 
 	void OGLShaderObject::CreateHwResources(ShaderStage stage, RenderEffect const& effect)
 	{
-		this->AppendTexSamplerBinds(stage, effect, checked_cast<OGLShaderStageObject*>(this->Stage(stage).get())->TexSamplerPairs());
+		this->AppendTexSamplerBinds(stage, effect, checked_cast<OGLShaderStageObject&>(*this->Stage(stage)).TexSamplerPairs());
 	}
 
 	void OGLShaderObject::AppendTexSamplerBinds(
@@ -1332,7 +1338,7 @@ namespace KlayGE
 			for (uint32_t stage = 0; stage < NumShaderStages; ++stage)
 			{
 				std::string const& func_name =
-					checked_cast<OGLShaderStageObject*>(this->Stage(static_cast<ShaderStage>(stage)).get())->ShaderFuncName();
+					checked_cast<OGLShaderStageObject&>(*this->Stage(static_cast<ShaderStage>(stage))).ShaderFuncName();
 				if (!func_name.empty())
 				{
 					shader_names += func_name + '/';
@@ -1352,7 +1358,7 @@ namespace KlayGE
 				std::vector<char> info(len);
 				glGetProgramInfoLog(glsl_program_, len, &len, &info[0]);
 
-				OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+				auto& re = checked_cast<OGLRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 				if (re.HackForNV())
 				{
 					MemInputStreamBuf info_buff(info.data(), info.size());
@@ -1391,7 +1397,7 @@ namespace KlayGE
 
 					if (stage != ShaderStage::NumStages)
 					{
-						PrintGlslError(checked_cast<OGLShaderStageObject*>(this->Stage(stage).get())->GlslSource(),
+						PrintGlslError(checked_cast<OGLShaderStageObject&>(*this->Stage(stage)).GlslSource(),
 							std::string_view(info.data(), info.size()));
 					}
 					else
@@ -1432,7 +1438,7 @@ namespace KlayGE
 			GLint ubo_size = 0;
 			glGetActiveUniformBlockiv(glsl_program_, i, GL_UNIFORM_BLOCK_DATA_SIZE, &ubo_size);
 			cbuff->Resize(ubo_size);
-			gl_bind_cbuffs_[i] = checked_cast<OGLGraphicsBuffer*>(cbuff->HWBuff().get())->GLvbo();
+			gl_bind_cbuffs_[i] = checked_cast<OGLGraphicsBuffer&>(*cbuff->HWBuff()).GLvbo();
 
 			GLint uniforms = 0;
 			glGetActiveUniformBlockiv(glsl_program_, i, GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS, &uniforms);
@@ -1496,12 +1502,12 @@ namespace KlayGE
 	void OGLShaderObject::Bind()
 	{
 		if (!this->Stage(ShaderStage::Pixel) ||
-			checked_cast<OGLShaderStageObject*>(this->Stage(ShaderStage::Pixel).get())->GlslSource().empty())
+			checked_cast<OGLShaderStageObject&>(*this->Stage(ShaderStage::Pixel)).GlslSource().empty())
 		{
 			glEnable(GL_RASTERIZER_DISCARD);
 		}
 
-		OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		auto& re = checked_cast<OGLRenderEngine&>(Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.UseProgram(glsl_program_);
 
 		for (auto const & pb : param_binds_)
@@ -1551,7 +1557,7 @@ namespace KlayGE
 	void OGLShaderObject::Unbind()
 	{
 		if (!this->Stage(ShaderStage::Pixel) ||
-			checked_cast<OGLShaderStageObject*>(this->Stage(ShaderStage::Pixel).get())->GlslSource().empty())
+			checked_cast<OGLShaderStageObject&>(*this->Stage(ShaderStage::Pixel)).GlslSource().empty())
 		{
 			glDisable(GL_RASTERIZER_DISCARD);
 		}

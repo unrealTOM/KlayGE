@@ -53,14 +53,13 @@ namespace
 			StaticMesh::DoBuildMeshInfo(model);
 
 			*(effect_->ParameterByName("albedo_tex")) = textures_[RenderMaterial::TS_Albedo];
-			*(effect_->ParameterByName("metalness_tex")) = textures_[RenderMaterial::TS_Metalness];
-			*(effect_->ParameterByName("glossiness_tex")) = textures_[RenderMaterial::TS_Glossiness];
+			*(effect_->ParameterByName("metalness_glossiness_tex")) = textures_[RenderMaterial::TS_MetalnessGlossiness];
 			*(effect_->ParameterByName("emissive_tex")) = textures_[RenderMaterial::TS_Emissive];
 			*(effect_->ParameterByName("normal_tex")) = textures_[RenderMaterial::TS_Normal];
 
 			*(effect_->ParameterByName("albedo_clr")) = mtl_->albedo;
-			*(effect_->ParameterByName("metalness_clr")) = float2(mtl_->metalness, !!textures_[RenderMaterial::TS_Metalness]);
-			*(effect_->ParameterByName("glossiness_clr")) = float2(mtl_->glossiness, !!textures_[RenderMaterial::TS_Glossiness]);
+			*(effect_->ParameterByName("metalness_glossiness_factor")) =
+				float3(mtl_->metalness, mtl_->glossiness, !!textures_[RenderMaterial::TS_MetalnessGlossiness]);
 			*(effect_->ParameterByName("emissive_clr")) = float4(mtl_->emissive.x(), mtl_->emissive.y(), mtl_->emissive.z(),
 				!!textures_[RenderMaterial::TS_Emissive]);
 			*(effect_->ParameterByName("albedo_map_enabled")) = static_cast<int32_t>(!!textures_[RenderMaterial::TS_Albedo]);
@@ -91,11 +90,12 @@ namespace
 			*(effect_->ParameterByName("model")) = model_mat_;
 			*(effect_->ParameterByName("eye_pos")) = app.ActiveCamera().EyePos();
 
-			auto const & light_src = Context::Instance().SceneManagerInstance().GetLight(0);
+			auto& scene_mgr = Context::Instance().SceneManagerInstance();
+			auto const& light_src = *scene_mgr.GetFrameLight(0);
 
-			*(effect_->ParameterByName("light_pos")) = light_src->Position();
-			*(effect_->ParameterByName("light_color")) = light_src->Color();
-			*(effect_->ParameterByName("light_falloff")) = light_src->Falloff();
+			*(effect_->ParameterByName("light_pos")) = light_src.Position();
+			*(effect_->ParameterByName("light_color")) = light_src.Color();
+			*(effect_->ParameterByName("light_falloff")) = light_src.Falloff();
 		}
 
 	private:
@@ -166,23 +166,27 @@ void VDMParticleApp::OnCreate()
 	this->LookAt(float3(1.47f, 2.35f, -5.75f), float3(-2.18f, 0.71f, 2.20f));
 	this->Proj(0.1f, 200);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
 	light_ = MakeSharedPtr<SpotLightSource>();
 	light_->Attrib(0);
 	light_->Color(float3(1.0f, 0.67f, 0.55f) * 20.0f);
 	light_->Falloff(float3(1, 0.5f, 0));
-	light_->Position(float3(0, 0, 0));
-	light_->Direction(float3(0, 1, 0));
 	light_->OuterAngle(PI / 2.5f);
 	light_->InnerAngle(PI / 4);
-	light_->AddToSceneManager();
+
+	auto light_node = MakeSharedPtr<SceneNode>(SceneNode::SOA_Cullable);
+	light_node->TransformToParent(MathLib::inverse(MathLib::look_at_lh(float3(0, 0, 0), float3(0, 1, 0), float3(0, 0, 1))));
+	light_node->AddComponent(light_);
+	root_node.AddChild(light_node);
 
 	ps_ = SyncLoadParticleSystem(ResLoader::Instance().Locate("Fire.psml"));
 	ps_->Gravity(0.5f);
 	ps_->MediaDensity(0.5f);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(ps_);
+	root_node.AddChild(ps_->RootNode());
 
 	float const SCALE = 6;
-	ps_->TransformToParent(MathLib::scaling(SCALE, SCALE, SCALE));
+	ps_->RootNode()->TransformToParent(MathLib::scaling(SCALE, SCALE, SCALE));
 	ps_->Emitter(0)->ModelMatrix(MathLib::translation(light_->Position() / SCALE));
 
 	scene_fb_ = rf.MakeFrameBuffer();
@@ -331,11 +335,11 @@ void VDMParticleApp::ParticleRenderingTypeChangedHandler(KlayGE::UIComboBox cons
 	particle_rendering_type_ = static_cast<ParticleRenderingType>(sender.GetSelectedIndex());
 	if (PRT_VDMQuarterRes == particle_rendering_type_)
 	{
-		ps_->Pass(PT_VDM);
+		ps_->RootNode()->Pass(PT_VDM);
 	}
 	else
 	{
-		ps_->Pass(PT_SimpleForward);
+		ps_->RootNode()->Pass(PT_SimpleForward);
 	}
 }
 
@@ -389,7 +393,7 @@ uint32_t VDMParticleApp::DoUpdate(uint32_t pass)
 			{
 				so->Visible(true);
 			}
-			ps_->Visible(false);
+			ps_->RootNode()->Visible(false);
 
 			return App3DFramework::URV_NeedFlush;
 		}
@@ -400,7 +404,7 @@ uint32_t VDMParticleApp::DoUpdate(uint32_t pass)
 			{
 				so->Visible(false);
 			}
-			ps_->Visible(true);
+			ps_->RootNode()->Visible(true);
 
 			depth_to_linear_pp_->Apply();
 
@@ -460,7 +464,7 @@ uint32_t VDMParticleApp::DoUpdate(uint32_t pass)
 
 	case 2:
 	default:
-		ps_->Visible(false);
+		ps_->RootNode()->Visible(false);
 
 		re.BindFrameBuffer(FrameBufferPtr());
 		re.CurFrameBuffer()->AttachedDsv()->ClearDepthStencil(1, 0);

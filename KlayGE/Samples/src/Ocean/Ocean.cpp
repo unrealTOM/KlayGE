@@ -134,8 +134,7 @@ namespace
 				*normal_map_enabled_param_ = static_cast<int32_t>(0);
 				*height_map_parallax_enabled_param_ = static_cast<int32_t>(0);
 				*height_map_tess_enabled_param_ = static_cast<int32_t>(0);
-				*metalness_clr_param_ = float2(1, 0);
-				*glossiness_clr_param_ = float2(0.5f, 0);
+				*metalness_glossiness_factor_param_ = float3(1, 0.5f, 0);
 				*opaque_depth_tex_param_ = drl->CurrFrameResolvedDepthTex(drl->ActiveViewport());
 				break;
 
@@ -192,10 +191,10 @@ namespace
 		TexturePtr reflection_tex_;
 	};
 
-	class OceanObject : public InfTerrainSceneObject
+	class OceanRenderableComponent : public InfTerrainRenderableComponent
 	{
 	public:
-		OceanObject()
+		OceanRenderableComponent() : InfTerrainRenderableComponent(MakeSharedPtr<RenderOcean>(0.0f, 10.0f))
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 			RenderEngine& re = rf.RenderEngineInstance();
@@ -203,7 +202,7 @@ namespace
 			base_level_ = 0;
 			strength_ = 10;
 
-			this->AddRenderable(MakeSharedPtr<RenderOcean>(base_level_, strength_));
+			auto& ocean_renderable = this->BoundRenderableOfType<RenderOcean>();
 
 			ocean_plane_ = MathLib::from_point_normal(float3(0, base_level_, 0), float3(0, 1, 0));
 			reflect_mat_ = MathLib::reflect(ocean_plane_);
@@ -235,7 +234,7 @@ namespace
 
 			use_tex_array_ = re.DeviceCaps().max_texture_array_length >= ocean_param_.num_frames;
 
-			checked_pointer_cast<RenderOcean>(renderables_[0])->PatchLength(ocean_param_.patch_length);
+			ocean_renderable.PatchLength(ocean_param_.patch_length);
 
 			TexturePtr disp_tex = LoadSoftwareTexture("OceanDisplacement.dds");
 			TexturePtr grad_tex = LoadSoftwareTexture("OceanGradient.dds");
@@ -252,7 +251,7 @@ namespace
 				&& (disp_param_tex->Width(0) == ocean_param_.num_frames)
 				&& (disp_param_tex->Height(0) >= 2))
 			{
-				auto const & disp_param_init_data = checked_cast<SoftwareTexture*>(disp_param_tex.get())->SubresourceData();
+				auto const& disp_param_init_data = checked_cast<SoftwareTexture&>(*disp_param_tex).SubresourceData();
 				float4 const * row0 = static_cast<float4 const *>(disp_param_init_data[0].data);
 				float4 const * row1 = row0 + disp_param_init_data[0].row_pitch / sizeof(float4);
 				displacement_params_.resize(ocean_param_.num_frames * 2);
@@ -277,8 +276,8 @@ namespace
 				ArrayRef<ElementInitData> gid;
 				if (use_load_tex)
 				{
-					did = checked_cast<SoftwareTexture*>(disp_tex.get())->SubresourceData();
-					gid = checked_cast<SoftwareTexture*>(grad_tex.get())->SubresourceData();
+					did = checked_cast<SoftwareTexture&>(*disp_tex).SubresourceData();
+					gid = checked_cast<SoftwareTexture&>(*grad_tex).SubresourceData();
 				}
 
 				displacement_tex_array_ = rf.MakeTexture2D(ocean_param_.dmap_dim, ocean_param_.dmap_dim,
@@ -296,8 +295,8 @@ namespace
 				}
 				gradient_tex_array_->BuildMipSubLevels();
 
-				checked_pointer_cast<RenderOcean>(renderables_[0])->DisplacementMapArray(displacement_tex_array_);
-				checked_pointer_cast<RenderOcean>(renderables_[0])->GradientMapArray(gradient_tex_array_);
+				ocean_renderable.DisplacementMapArray(displacement_tex_array_);
+				ocean_renderable.GradientMapArray(gradient_tex_array_);
 			}
 			else
 			{
@@ -311,7 +310,7 @@ namespace
 					ArrayRef<ElementInitData> did;
 					if (use_load_tex)
 					{
-						auto const & disp_init_data = checked_cast<SoftwareTexture*>(disp_tex.get())->SubresourceData();
+						auto const& disp_init_data = checked_cast<SoftwareTexture&>(*disp_tex).SubresourceData();
 						did = disp_init_data[i * disp_tex->NumMipMaps()];
 					}
 
@@ -322,7 +321,7 @@ namespace
 
 					if (use_load_tex)
 					{
-						auto const & grad_init_data = checked_cast<SoftwareTexture*>(grad_tex.get())->SubresourceData();
+						auto const & grad_init_data = checked_cast<SoftwareTexture&>(*grad_tex).SubresourceData();
 
 						TexturePtr gta;
 						if (EF_GR8 == fmt)
@@ -362,11 +361,38 @@ namespace
 				}
 			}
 
-			this->OnMainThreadUpdate().Connect([this](float app_time, float elapsed_time)
+			this->OnMainThreadUpdate().Connect([this](SceneComponent& component, float app_time, float elapsed_time)
 				{
+					KFL_UNUSED(component);
 					KFL_UNUSED(elapsed_time);
 
-					this->MainThreadUpdateFunc(app_time);
+					if (dirty_)
+					{
+						this->GenWaveTextures();
+
+						dirty_ = false;
+					}
+
+					auto& ocean_renderable = this->BoundRenderableOfType<RenderOcean>();
+
+					float t = app_time * ocean_param_.time_scale / ocean_param_.time_peroid;
+					float frame = (t - floor(t)) * ocean_param_.num_frames;
+					int frame0 = static_cast<int>(frame);
+					int frame1 = frame0 + 1;
+					ocean_renderable.InterpolateFrac(frame - frame0);
+					frame0 %= ocean_param_.num_frames;
+					frame1 %= ocean_param_.num_frames;
+					if (use_tex_array_)
+					{
+						ocean_renderable.Frames(int2(frame0, frame1));
+					}
+					else
+					{
+						ocean_renderable.DisplacementMap(displacement_tex_[frame0], displacement_tex_[frame1]);
+						ocean_renderable.GradientMap(gradient_tex_[frame0], gradient_tex_[frame1]);
+					}
+					ocean_renderable.DisplacementParam(displacement_params_[frame0], displacement_params_[frame1],
+						displacement_params_[ocean_param_.num_frames + frame0], displacement_params_[ocean_param_.num_frames + frame1]);
 				});
 		}
 
@@ -375,38 +401,10 @@ namespace
 			return ocean_plane_;
 		}
 
-		void MainThreadUpdateFunc(float app_time)
-		{
-			if (dirty_)
-			{
-				this->GenWaveTextures();
-
-				dirty_ = false;
-			}
-
-			float t = app_time * ocean_param_.time_scale / ocean_param_.time_peroid;
-			float frame = (t - floor(t)) * ocean_param_.num_frames;
-			int frame0 = static_cast<int>(frame);
-			int frame1 = frame0 + 1;
-			checked_pointer_cast<RenderOcean>(renderables_[0])->InterpolateFrac(frame - frame0);
-			frame0 %= ocean_param_.num_frames;
-			frame1 %= ocean_param_.num_frames;
-			if (use_tex_array_)
-			{
-				checked_pointer_cast<RenderOcean>(renderables_[0])->Frames(int2(frame0, frame1));
-			}
-			else
-			{
-				checked_pointer_cast<RenderOcean>(renderables_[0])->DisplacementMap(displacement_tex_[frame0], displacement_tex_[frame1]);
-				checked_pointer_cast<RenderOcean>(renderables_[0])->GradientMap(gradient_tex_[frame0], gradient_tex_[frame1]);
-			}
-			checked_pointer_cast<RenderOcean>(renderables_[0])->DisplacementParam(displacement_params_[frame0], displacement_params_[frame1],
-				displacement_params_[ocean_param_.num_frames + frame0], displacement_params_[ocean_param_.num_frames + frame1]);
-		}
-
 		void ReflectionTex(TexturePtr const & tex)
 		{
-			checked_pointer_cast<RenderOcean>(renderables_[0])->ReflectionTex(tex);
+			auto& ocean_renderable = this->BoundRenderableOfType<RenderOcean>();
+			ocean_renderable.ReflectionTex(tex);
 		}
 
 		void ReflectViewParams(float3& reflect_eye, float3& reflect_at, float3& reflect_up,
@@ -525,7 +523,8 @@ namespace
 	private:
 		void GenWaveTextures()
 		{
-			checked_pointer_cast<RenderOcean>(renderables_[0])->PatchLength(ocean_param_.patch_length);
+			auto& ocean_renderable = this->BoundRenderableOfType<RenderOcean>();
+			ocean_renderable.PatchLength(ocean_param_.patch_length);
 
 			ocean_simulator_->Parameters(ocean_param_);
 
@@ -808,14 +807,20 @@ void OceanApp::OnCreate()
 	font_ = SyncLoadFont("gkai00mp.kfont");
 
 	deferred_rendering_ = Context::Instance().DeferredRenderingLayerInstance();
-	deferred_rendering_->SSVOEnabled(0, false);
+	deferred_rendering_->SSVOEnabled(1, false);
 
+	auto& root_node = Context::Instance().SceneManagerInstance().SceneRootNode();
+
+	auto sun_light_node = MakeSharedPtr<SceneNode>(0);
 	sun_light_ = MakeSharedPtr<DirectionalLightSource>();
 	// TODO: Fix the shadow flicking
 	sun_light_->Attrib(LightSource::LSA_NoShadow);
-	sun_light_->Direction(float3(0.267835f, -0.0517653f, -0.960315f));
 	sun_light_->Color(float3(1, 0.7f, 0.5f));
-	sun_light_->AddToSceneManager();
+	sun_light_node->TransformToParent(
+		MathLib::to_matrix(MathLib::axis_to_axis(float3(0, 0, 1), float3(0.267835f, -0.0517653f, -0.960315f))));
+	sun_light_node->AddComponent(sun_light_);
+	sun_light_node->AddComponent(MakeSharedPtr<LensFlareRenderableComponent>());
+	root_node.AddChild(sun_light_node);
 	
 	Color fog_color(0.61f, 0.52f, 0.62f, 1);
 	if (Context::Instance().Config().graphics_cfg.gamma)
@@ -826,7 +831,6 @@ void OceanApp::OnCreate()
 	}
 
 	auto terrain_renderable = MakeSharedPtr<ProceduralTerrain>();
-	terrain_ = MakeSharedPtr<HQTerrainSceneObject>(terrain_renderable);
 	terrain_renderable->TextureLayer(0, ASyncLoadTexture("RealSand40BoH.dds", EAH_GPU_Read | EAH_Immutable));
 	terrain_renderable->TextureLayer(1, ASyncLoadTexture("snow_DM.dds", EAH_GPU_Read | EAH_Immutable));
 	terrain_renderable->TextureLayer(2, ASyncLoadTexture("GrassGreenTexture0002.dds", EAH_GPU_Read | EAH_Immutable));
@@ -835,23 +839,22 @@ void OceanApp::OnCreate()
 	terrain_renderable->TextureScale(1, float2(1, 1));
 	terrain_renderable->TextureScale(2, float2(3, 3));
 	terrain_renderable->TextureScale(3, float2(1, 1));
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(terrain_);
+	auto terrain_node =
+		MakeSharedPtr<SceneNode>(MakeSharedPtr<HQTerrainRenderableComponent>(terrain_renderable), L"TerrainNode", SceneNode::SOA_Moveable);
+	root_node.AddChild(terrain_node);
 
-	ocean_ = MakeSharedPtr<OceanObject>();
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(ocean_);
-	checked_pointer_cast<RenderOcean>(ocean_->GetRenderable())->SkylightTex(y_cube, c_cube);
-	checked_pointer_cast<RenderOcean>(ocean_->GetRenderable())->FogColor(fog_color);
+	ocean_ = MakeSharedPtr<OceanRenderableComponent>();
+	auto ocean_node = MakeSharedPtr<SceneNode>(ocean_, L"OceanNode", SceneNode::SOA_Moveable);
+	root_node.AddChild(ocean_node);
+	ocean_->BoundRenderableOfType<RenderOcean>().SkylightTex(y_cube, c_cube);
+	ocean_->BoundRenderableOfType<RenderOcean>().FogColor(fog_color);
 
-	terrain_renderable->ReflectionPlane(checked_pointer_cast<OceanObject>(ocean_)->OceanPlane());
+	terrain_renderable->ReflectionPlane(checked_pointer_cast<OceanRenderableComponent>(ocean_)->OceanPlane());
 
-	sky_box_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableFoggySkyBox>(), SceneNode::SOA_NotCastShadow);
-	checked_pointer_cast<RenderableFoggySkyBox>(sky_box_->GetRenderable())->CompressedCubeMap(y_cube, c_cube);
-	checked_pointer_cast<RenderableFoggySkyBox>(sky_box_->GetRenderable())->FogColor(fog_color);
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sky_box_);
-
-	sun_flare_ = MakeSharedPtr<LensFlareSceneObject>();
-	checked_pointer_cast<LensFlareSceneObject>(sun_flare_)->Direction(float3(-0.267835f, 0.0517653f, 0.960315f));
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(sun_flare_);
+	auto skybox = MakeSharedPtr<RenderableFoggySkyBox>();
+	skybox->CompressedCubeMap(y_cube, c_cube);
+	skybox->FogColor(fog_color);
+	root_node.AddChild(MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableComponent>(skybox), SceneNode::SOA_NotCastShadow));
 
 	fog_pp_ = SyncLoadPostProcess("Fog.ppml", "fog");
 	fog_pp_->SetParam(1, float3(fog_color.r(), fog_color.g(), fog_color.b()));
@@ -866,6 +869,11 @@ void OceanApp::OnCreate()
 	reflection_fb_ = Context::Instance().RenderFactoryInstance().MakeFrameBuffer();
 	reflection_fb_->GetViewport()->camera->ProjParams(scene_camera.FOV(), scene_camera.Aspect(),
 		scene_camera.NearPlane(), scene_camera.FarPlane());
+
+	auto reflection_camera_node =
+		MakeSharedPtr<SceneNode>(L"ReflectionCameraNode", SceneNode::SOA_Cullable | SceneNode::SOA_Moveable | SceneNode::SOA_NotCastShadow);
+	reflection_camera_node->AddComponent(reflection_fb_->GetViewport()->camera);
+	root_node.AddChild(reflection_camera_node);
 
 	fpcController_.Scalers(0.05f, 1.0f);
 
@@ -1013,7 +1021,7 @@ void OceanApp::DMapDimChangedHandler(UISlider const & sender)
 	stream << L"DMap dim: " << dmap_dim;
 	dialog_params_->Control<UIStatic>(id_dmap_dim_static_)->SetText(stream.str());
 
-	checked_pointer_cast<OceanObject>(ocean_)->DMapDim(dmap_dim);
+	checked_pointer_cast<OceanRenderableComponent>(ocean_)->DMapDim(dmap_dim);
 }
 
 void OceanApp::PatchLengthChangedHandler(UISlider const & sender)
@@ -1024,7 +1032,7 @@ void OceanApp::PatchLengthChangedHandler(UISlider const & sender)
 	stream << L"Patch length: " << patch_length;
 	dialog_params_->Control<UIStatic>(id_patch_length_static_)->SetText(stream.str());
 
-	checked_pointer_cast<OceanObject>(ocean_)->PatchLength(patch_length);
+	checked_pointer_cast<OceanRenderableComponent>(ocean_)->PatchLength(patch_length);
 }
 
 void OceanApp::TimeScaleChangedHandler(UISlider const & sender)
@@ -1035,7 +1043,7 @@ void OceanApp::TimeScaleChangedHandler(UISlider const & sender)
 	stream << L"Time scale: " << time_scale;
 	dialog_params_->Control<UIStatic>(id_time_scale_static_)->SetText(stream.str());
 
-	checked_pointer_cast<OceanObject>(ocean_)->TimeScale(time_scale);
+	checked_pointer_cast<OceanRenderableComponent>(ocean_)->TimeScale(time_scale);
 }
 
 void OceanApp::WaveAmplitudeChangedHandler(UISlider const & sender)
@@ -1046,7 +1054,7 @@ void OceanApp::WaveAmplitudeChangedHandler(UISlider const & sender)
 	stream << L"Wave amplitude: " << wave_amp;
 	dialog_params_->Control<UIStatic>(id_wave_amplitude_static_)->SetText(stream.str());
 
-	checked_pointer_cast<OceanObject>(ocean_)->WaveAmplitude(wave_amp);
+	checked_pointer_cast<OceanRenderableComponent>(ocean_)->WaveAmplitude(wave_amp);
 }
 
 void OceanApp::WindSpeedXChangedHandler(UISlider const & sender)
@@ -1057,7 +1065,7 @@ void OceanApp::WindSpeedXChangedHandler(UISlider const & sender)
 	stream << L"Wind speed X: " << wind_speed;
 	dialog_params_->Control<UIStatic>(id_wind_speed_x_static_)->SetText(stream.str());
 
-	checked_pointer_cast<OceanObject>(ocean_)->WindSpeedX(wind_speed);
+	checked_pointer_cast<OceanRenderableComponent>(ocean_)->WindSpeedX(wind_speed);
 }
 
 void OceanApp::WindSpeedYChangedHandler(UISlider const & sender)
@@ -1068,7 +1076,7 @@ void OceanApp::WindSpeedYChangedHandler(UISlider const & sender)
 	stream << L"Wind speed Y: " << wind_speed;
 	dialog_params_->Control<UIStatic>(id_wind_speed_y_static_)->SetText(stream.str());
 
-	checked_pointer_cast<OceanObject>(ocean_)->WindSpeedY(wind_speed);
+	checked_pointer_cast<OceanRenderableComponent>(ocean_)->WindSpeedY(wind_speed);
 }
 
 void OceanApp::WindDependencyChangedHandler(UISlider const & sender)
@@ -1079,7 +1087,7 @@ void OceanApp::WindDependencyChangedHandler(UISlider const & sender)
 	stream << L"Wind dependency: " << dep;
 	dialog_params_->Control<UIStatic>(id_wind_dependency_static_)->SetText(stream.str());
 
-	checked_pointer_cast<OceanObject>(ocean_)->WindDependency(dep);
+	checked_pointer_cast<OceanRenderableComponent>(ocean_)->WindDependency(dep);
 }
 
 void OceanApp::ChoppyScaleChangedHandler(UISlider const & sender)
@@ -1090,7 +1098,7 @@ void OceanApp::ChoppyScaleChangedHandler(UISlider const & sender)
 	stream << L"Choppy scale: " << choppy;
 	dialog_params_->Control<UIStatic>(id_choppy_scale_static_)->SetText(stream.str());
 
-	checked_pointer_cast<OceanObject>(ocean_)->ChoppyScale(choppy);
+	checked_pointer_cast<OceanRenderableComponent>(ocean_)->ChoppyScale(choppy);
 }
 
 void OceanApp::LightShaftHandler(UICheckBox const & sender)
@@ -1133,18 +1141,20 @@ uint32_t OceanApp::DoUpdate(uint32_t pass)
 {
 	if (0 == deferred_rendering_->ActiveViewport())
 	{
-		ocean_->Visible(false);
+		ocean_->Enabled(false);
 
 		float3 reflect_eye, reflect_at, reflect_up;
-		checked_pointer_cast<OceanObject>(ocean_)->ReflectViewParams(reflect_eye, reflect_at, reflect_up,
-			screen_camera_->EyePos(), screen_camera_->LookAt(), screen_camera_->UpVec());
-		reflection_fb_->GetViewport()->camera->ViewParams(reflect_eye, reflect_at, reflect_up);
+		checked_pointer_cast<OceanRenderableComponent>(ocean_)->ReflectViewParams(
+			reflect_eye, reflect_at, reflect_up, screen_camera_->EyePos(), screen_camera_->LookAt(), screen_camera_->UpVec());
+		reflection_fb_->GetViewport()->camera->LookAtDist(MathLib::length(reflect_at - reflect_eye));
+		reflection_fb_->GetViewport()->camera->BoundSceneNode()->TransformToWorld(
+			MathLib::inverse(MathLib::look_at_lh(reflect_eye, reflect_at, reflect_up)));
 	}
 	else
 	{
-		ocean_->Visible(true);
+		ocean_->Enabled(true);
 
-		checked_pointer_cast<OceanObject>(ocean_)->ReflectionTex(reflection_tex_);
+		checked_pointer_cast<OceanRenderableComponent>(ocean_)->ReflectionTex(reflection_tex_);
 	}
 
 	uint32_t ret = deferred_rendering_->Update(pass);

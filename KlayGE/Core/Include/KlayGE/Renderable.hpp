@@ -25,6 +25,7 @@
 #include <KFL/ArrayRef.hpp>
 #include <vector>
 #include <KlayGE/RenderMaterial.hpp>
+#include <KlayGE/SceneComponent.hpp>
 
 namespace KlayGE
 {
@@ -200,9 +201,6 @@ namespace KlayGE
 		}
 		bool AllHWResourceReady() const;
 
-		bool Enabled() const;
-		void Enabled(bool enabled);
-
 		// For select mode
 
 		virtual void ObjectID(uint32_t id);
@@ -276,8 +274,6 @@ namespace KlayGE
 
 		int32_t active_lod_ = 0;
 
-		bool enabled_ = true;
-
 		// For select mode
 
 		RenderTechnique* select_mode_tech_;
@@ -324,10 +320,8 @@ namespace KlayGE
 		RenderEffectParameter* albedo_map_enabled_param_;
 		RenderEffectParameter* albedo_tex_param_;
 		RenderEffectParameter* albedo_clr_param_;
-		RenderEffectParameter* metalness_tex_param_;
-		RenderEffectParameter* metalness_clr_param_;
-		RenderEffectParameter* glossiness_tex_param_;
-		RenderEffectParameter* glossiness_clr_param_;
+		RenderEffectParameter* metalness_glossiness_tex_param_;
+		RenderEffectParameter* metalness_glossiness_factor_param_;
 		RenderEffectParameter* emissive_tex_param_;
 		RenderEffectParameter* emissive_clr_param_;
 		RenderEffectParameter* normal_map_enabled_param_;
@@ -338,8 +332,30 @@ namespace KlayGE
 		RenderEffectParameter* opaque_depth_tex_param_;
 		RenderEffectParameter* reflection_tex_param_;
 		RenderEffectParameter* alpha_test_threshold_param_;
+		RenderEffectParameter* normal_scale_param_;
+		RenderEffectParameter* occlusion_strength_param_;
 
 		std::array<ShaderResourceViewPtr, RenderMaterial::TS_NumTextureSlots> textures_;
+	};
+
+	// TODO: Consider merging this with Renderable
+	class KLAYGE_CORE_API RenderableComponent : public SceneComponent
+	{
+	public:
+		BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS((SceneComponent))
+
+		explicit RenderableComponent(RenderablePtr const& renderable);
+
+		Renderable& BoundRenderable() const;
+
+		template <typename T>
+		T& BoundRenderableOfType() const
+		{
+			return checked_cast<T&>(this->BoundRenderable());
+		}
+
+	private:
+		RenderablePtr renderable_;
 	};
 }
 
