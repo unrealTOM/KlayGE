@@ -5,6 +5,12 @@
 #include <KlayGE/Font.hpp>
 #include <KlayGE/CameraController.hpp>
 
+namespace
+{
+	class BitonicSortObject;
+	using BitonicSortObjectPtr = std::shared_ptr<BitonicSortObject>;
+}
+
 class BitonicSortApp : public KlayGE::App3DFramework
 {
 public:
@@ -20,7 +26,7 @@ private:
 	void InputHandler(KlayGE::InputEngine const& sender, KlayGE::InputAction const& action);
 
 	KlayGE::FontPtr font_;
-	KlayGE::SceneNodePtr bitonic_;
+	BitonicSortObjectPtr bitonic_;
 
 	KlayGE::TrackballCameraController tb_controller_;
 

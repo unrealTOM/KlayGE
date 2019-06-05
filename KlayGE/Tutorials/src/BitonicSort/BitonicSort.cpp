@@ -53,10 +53,10 @@ namespace
 		return (uint32_t)random_dis(gen);
 	}
 
-	class BitonicSortObject : public SceneNode
+	class BitonicSortObject
 	{
 	public:
-		BitonicSortObject() : SceneNode(L"BitonicSortObject", SOA_Invisible)
+		BitonicSortObject()
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
@@ -205,7 +205,6 @@ void BitonicSortApp::OnCreate()
 	inputEngine.ActionMap(actionMap, input_handler);
 
 	bitonic_ = MakeSharedPtr<BitonicSortObject>();
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(bitonic_);
 
 	UIManager::Instance().Load(ResLoader::Instance().Open("BitonicSort.uiml"));
 }
@@ -255,7 +254,7 @@ uint32_t BitonicSortApp::DoUpdate(uint32_t /*pass*/)
 		clear_clr.b() = 0.325f;
 	}
 
-	checked_pointer_cast<BitonicSortObject>(bitonic_)->Update(this->AppTime(), this->FrameTime());
+	bitonic_->Update(this->AppTime(), this->FrameTime());
 
 	re.CurFrameBuffer()->Clear(KlayGE::FrameBuffer::CBM_Color | KlayGE::FrameBuffer::CBM_Depth, clear_clr, 1.0f, 0);
 	return KlayGE::App3DFramework::URV_NeedFlush | KlayGE::App3DFramework::URV_Finished;
