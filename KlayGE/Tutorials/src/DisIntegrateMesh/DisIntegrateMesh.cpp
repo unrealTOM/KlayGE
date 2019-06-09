@@ -1,194 +1,807 @@
 #include <KlayGE/KlayGE.hpp>
 #include <KFL/CXX17/iterator.hpp>
-#include <KFL/Math.hpp>
-#include <KFL/Half.hpp>
 #include <KFL/Util.hpp>
-#include <KlayGE/Camera.hpp>
-#include <KlayGE/Context.hpp>
+#include <KFL/Half.hpp>
+#include <KFL/Math.hpp>
 #include <KlayGE/Font.hpp>
-#include <KlayGE/FrameBuffer.hpp>
-#include <KlayGE/KlayGE.hpp>
-#include <KlayGE/RenderEffect.hpp>
-#include <KlayGE/RenderEngine.hpp>
-#include <KlayGE/RenderSettings.hpp>
 #include <KlayGE/Renderable.hpp>
 #include <KlayGE/RenderableHelper.hpp>
-#include <KlayGE/ResLoader.hpp>
+#include <KlayGE/RenderEngine.hpp>
+#include <KlayGE/RenderEffect.hpp>
+#include <KlayGE/FrameBuffer.hpp>
 #include <KlayGE/SceneManager.hpp>
+#include <KlayGE/Context.hpp>
+#include <KlayGE/ResLoader.hpp>
+#include <KlayGE/RenderSettings.hpp>
+#include <KlayGE/Mesh.hpp>
+#include <KlayGE/RenderableHelper.hpp>
 #include <KlayGE/SceneNodeHelper.hpp>
+#include <KlayGE/ElementFormat.hpp>
 #include <KlayGE/UI.hpp>
+#include <KlayGE/Camera.hpp>
 
-#include <KlayGE/InputFactory.hpp>
 #include <KlayGE/RenderFactory.hpp>
+#include <KlayGE/InputFactory.hpp>
 
-#include <algorithm>
-#include <sstream>
 #include <vector>
+#include <sstream>
+#include <fstream>
 #include <random>
 
 #include "SampleCommon.hpp"
-#include "BitonicSort.hpp"
+#include "DisIntegrateMesh.hpp"
 
 using namespace std;
 using namespace KlayGE;
 
 namespace
 {
-	// The number of elements to sort is limited to an even power of 2
-	// At minimum 8,192 elements - BITONIC_BLOCK_SIZE * TRANSPOSE_BLOCK_SIZE
-	// At maximum 262,144 elements - BITONIC_BLOCK_SIZE * BITONIC_BLOCK_SIZE
-	const uint32_t NUM_ELEMENTS = 512 * 512;
-	const uint32_t BITONIC_BLOCK_SIZE = 512;
-	const uint32_t TRANSPOSE_BLOCK_SIZE = 16;
-	const uint32_t MATRIX_WIDTH = BITONIC_BLOCK_SIZE;
-	const uint32_t MATRIX_HEIGHT = NUM_ELEMENTS / BITONIC_BLOCK_SIZE;
+	bool use_gs = false;
+	bool use_so = false;
+	bool use_cs = false;
+	bool use_mrt = false;
+	bool use_typed_uav = false;
 
-	std::vector<uint32_t> data(NUM_ELEMENTS);
+	int const NUM_PARTICLE = 65536;
 
-	ranlux24_base gen;
-	uniform_int_distribution<> random_dis(0, 100000);
-
-	uint32_t SampleRand()
+	float GetDensity(int x, int y, int z, std::vector<uint8_t> const & data, uint32_t vol_size)
 	{
-		return (uint32_t)random_dis(gen);
+		if (x < 0)
+		{
+			x += vol_size;
+		}
+		if (y < 0)
+		{
+			y += vol_size;
+		}
+		if (z < 0)
+		{
+			z += vol_size;
+		}
+
+		x = x % vol_size;
+		y = y % vol_size;
+		z = z % vol_size;
+
+		return data[((z * vol_size + y) * vol_size + x) * 4 + 3] / 255.0f - 0.5f;
 	}
 
-	class BitonicSortObject : public SceneNode
+	TexturePtr CreateNoiseVolume(uint32_t vol_size)
+	{
+		std::ranlux24_base gen;
+		std::uniform_int_distribution<> dis(0, 255);
+
+		std::vector<uint8_t> data_block(vol_size * vol_size * vol_size * 4);
+		ElementInitData init_data;
+		init_data.data = &data_block[0];
+		init_data.row_pitch = vol_size * 4;
+		init_data.slice_pitch = vol_size * vol_size * 4;
+
+		// Gen a bunch of random values
+		for (size_t i = 0; i < data_block.size() / 4; ++i)
+		{
+			data_block[i * 4 + 3] = static_cast<uint8_t>(dis(gen));
+		}
+
+		// Generate normals from the density gradient
+		float height_adjust = 0.5f;
+		float3 normal;
+		for (uint32_t z = 0; z < vol_size; ++z)
+		{
+			for (uint32_t y = 0; y < vol_size; ++y)
+			{
+				for (uint32_t x = 0; x < vol_size; ++x)
+				{
+					normal.x() = (GetDensity(x + 1, y, z, data_block, vol_size) - GetDensity(x - 1, y, z, data_block, vol_size)) / height_adjust;
+					normal.y() = (GetDensity(x, y + 1, z, data_block, vol_size) - GetDensity(x, y - 1, z, data_block, vol_size)) / height_adjust;
+					normal.z() = (GetDensity(x, y, z + 1, data_block, vol_size) - GetDensity(x, y, z - 1, data_block, vol_size)) / height_adjust;
+
+					normal = MathLib::normalize(normal);
+
+					data_block[((z * vol_size + y) * vol_size + x) * 4 + 0] = static_cast<uint8_t>(MathLib::clamp(static_cast<int>((normal.x() / 2 + 0.5f) * 255.0f), 0, 255));
+					data_block[((z * vol_size + y) * vol_size + x) * 4 + 1] = static_cast<uint8_t>(MathLib::clamp(static_cast<int>((normal.y() / 2 + 0.5f) * 255.0f), 0, 255));
+					data_block[((z * vol_size + y) * vol_size + x) * 4 + 2] = static_cast<uint8_t>(MathLib::clamp(static_cast<int>((normal.z() / 2 + 0.5f) * 255.0f), 0, 255));
+				}
+			}
+		}
+
+		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+		RenderDeviceCaps const & caps = rf.RenderEngineInstance().DeviceCaps();
+		TexturePtr ret;
+		if (caps.max_texture_depth >= vol_size)
+		{
+			auto const fmt = rf.RenderEngineInstance().DeviceCaps().BestMatchTextureFormat({ EF_ABGR8, EF_ARGB8 });
+			BOOST_ASSERT(fmt != EF_Unknown);
+
+			if (fmt == EF_ARGB8)
+			{
+				for (uint32_t i = 0; i < vol_size * vol_size * vol_size; ++i)
+				{
+					std::swap(data_block[i * 4 + 0], data_block[i * 4 + 2]);
+				}
+			}
+
+			ret = rf.MakeTexture3D(vol_size, vol_size, vol_size, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_Immutable, init_data);
+		}
+
+		return ret;
+	}
+
+	class RenderParticles : public Renderable
 	{
 	public:
-		BitonicSortObject() : SceneNode(L"BitonicSortObject", SOA_Invisible)
+		explicit RenderParticles(int max_num_particles)
+			: Renderable(L"RenderParticles"),
+			tex_width_(256), tex_height_((max_num_particles + 255) / 256)
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			effect_ = SyncLoadRenderEffect("BitonicSort.fxml");
-			technique_transpose_ = effect_->TechniqueByName("Transpose");
-			technique_bitonic_ = effect_->TechniqueByName("Bitonic");
+			float2 texs[] =
+			{
+				float2(-1.0f, 1.0f),
+				float2(1.0f, 1.0f),
+				float2(-1.0f, -1.0f),
+				float2(1.0f, -1.0f),
+			};
 
-			uint32_t access_hint = EAH_GPU_Read | EAH_GPU_Write | EAH_GPU_Unordered | EAH_GPU_Structured;
+			uint16_t indices[] =
+			{
+				0, 1, 2, 3,
+			};
 
-			buffer1_ = rf.MakeVertexBuffer(BU_Dynamic, access_hint, NUM_ELEMENTS * sizeof(uint32_t), nullptr, sizeof(uint32_t));
-			buffer1_uav_ = rf.MakeBufferUav(buffer1_, EF_R32UI);
-			buffer1_srv_ = rf.MakeBufferSrv(buffer1_, EF_R32UI);
+			rls_[0] = rf.MakeRenderLayout();
 
-			buffer2_ = rf.MakeVertexBuffer(BU_Dynamic, access_hint, NUM_ELEMENTS * sizeof(uint32_t), nullptr, sizeof(uint32_t));
-			buffer2_uav_ = rf.MakeBufferUav(buffer2_, EF_R32UI);
-			buffer2_srv_ = rf.MakeBufferSrv(buffer2_, EF_R32UI);
+			effect_ = SyncLoadRenderEffect("GPUParticleSystem.fxml");
+			*(effect_->ParameterByName("particle_tex")) = ASyncLoadTexture("particle.dds", EAH_GPU_Read | EAH_Immutable);
+			if (use_gs)
+			{
+				rls_[0]->TopologyType(RenderLayout::TT_PointList);
 
-			result_cpu_buffer_ = rf.MakeVertexBuffer(BU_Dynamic, EAH_CPU_Read, buffer1_->Size(), nullptr);
+				if (use_so || use_cs)
+				{
+					technique_ = effect_->TechniqueByName("ParticlesWithGSSO");
+				}
+				else
+				{
+					std::vector<float2> p_in_tex(max_num_particles);
+					for (int i = 0; i < max_num_particles; ++i)
+					{
+						p_in_tex[i] = float2((i % tex_width_ + 0.5f) / tex_width_,
+							(static_cast<float>(i) / tex_width_) / tex_height_);
+					}
+					GraphicsBufferPtr pos = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+						max_num_particles * sizeof(float2), &p_in_tex[0]);
+
+					rls_[0]->BindVertexStream(pos, VertexElement(VEU_Position, 0, EF_GR32F));
+					technique_ = effect_->TechniqueByName("ParticlesWithGS");
+				}
+			}
+			else
+			{
+				std::vector<float2> p_in_tex(max_num_particles);
+				for (int i = 0; i < max_num_particles; ++i)
+				{
+					p_in_tex[i] = float2((i % tex_width_ + 0.5f) / tex_width_,
+						(static_cast<float>(i) / tex_width_) / tex_height_);
+				}
+				GraphicsBufferPtr pos = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+					max_num_particles * sizeof(float2), &p_in_tex[0]);
+
+				GraphicsBufferPtr tex0 = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+					sizeof(texs), texs);
+
+				GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+					sizeof(indices), indices);
+
+				rls_[0]->TopologyType(RenderLayout::TT_TriangleStrip);
+				rls_[0]->BindVertexStream(tex0, VertexElement(VEU_TextureCoord, 0, EF_GR32F),
+					RenderLayout::ST_Geometry, max_num_particles);
+				rls_[0]->BindVertexStream(pos, VertexElement(VEU_Position, 0, EF_GR32F),
+					RenderLayout::ST_Instance, 1);
+				rls_[0]->BindIndexStream(ib, EF_R16UI);
+
+				technique_ = effect_->TechniqueByName("Particles");
+			}
+
+			noise_vol_tex_ = CreateNoiseVolume(32);
+			*(effect_->ParameterByName("noise_vol_tex")) = noise_vol_tex_;
+
+			*(effect_->ParameterByName("point_radius")) = 0.1f;
+			*(effect_->ParameterByName("init_pos_life")) = float4(0, 0, 0, 8);
 		}
 
-		void SetConstants(uint32_t iLevel, uint32_t iLevelMask, uint32_t iWidth, uint32_t iHeight)
+		void SceneTexture(TexturePtr const & tex)
 		{
-			*(effect_->ParameterByName("g_iLevel")) = iLevel;
-			*(effect_->ParameterByName("g_iLevelMask")) = iLevelMask;
-			*(effect_->ParameterByName("g_iWidth")) = iWidth;
-			*(effect_->ParameterByName("g_iHeight")) = iHeight;
+			*(effect_->ParameterByName("scene_tex")) = tex;
 		}
 
-		void Update(float /*app_time*/, float /*elapsed_time*/)
+		void OnRenderBegin()
 		{
-			RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-			re.BindFrameBuffer(FrameBufferPtr());
+			App3DFramework const & app = Context::Instance().AppInstance();
+			Camera const & camera = app.ActiveCamera();
 
-			// Upload the data
-			std::generate(data.begin(), data.end(), SampleRand);
-			buffer1_->UpdateSubresource(0, NUM_ELEMENTS * sizeof(uint32_t), &data[0]);
+			*(effect_->ParameterByName("View")) = camera.ViewMatrix();
+			*(effect_->ParameterByName("Proj")) = camera.ProjMatrix();
+			*(effect_->ParameterByName("inv_view")) = camera.InverseViewMatrix();
+			*(effect_->ParameterByName("inv_proj")) = camera.InverseProjMatrix();
 
-			// Sort the data
-			// First sort the rows for the levels <= to the block size
-			for (uint32_t level = 2; level <= BITONIC_BLOCK_SIZE; level = level * 2)
+			*(effect_->ParameterByName("far_plane")) = app.ActiveCamera().FarPlane();
+		}
+
+		void PosTexture(TexturePtr const & particle_pos_tex)
+		{
+			*(effect_->ParameterByName("particle_pos_tex")) = particle_pos_tex;
+		}
+
+		void PosVB(GraphicsBufferPtr const & particle_pos_vb)
+		{
+			if (use_gs && (use_so || use_cs))
 			{
-				SetConstants(level, level, MATRIX_HEIGHT, MATRIX_WIDTH);
-
-				// Sort the row data
-				*(effect_->ParameterByName("Data")) = buffer1_uav_;
-				re.Dispatch(*effect_, *technique_bitonic_, NUM_ELEMENTS / BITONIC_BLOCK_SIZE, 1, 1);
+				rls_[0]->BindVertexStream(particle_pos_vb, VertexElement(VEU_Position, 0, EF_ABGR32F));
 			}
-
-			// Then sort the rows and columns for the levels > than the block size
-			// Transpose. Sort the Columns. Transpose. Sort the Rows.
-			for (uint32_t level = (BITONIC_BLOCK_SIZE * 2); level <= NUM_ELEMENTS; level = level * 2)
-			{
-				SetConstants((level / BITONIC_BLOCK_SIZE), (level & ~NUM_ELEMENTS) / BITONIC_BLOCK_SIZE, MATRIX_WIDTH, MATRIX_HEIGHT);
-
-				// Transpose the data from buffer 1 into buffer 2
-				*(effect_->ParameterByName("Data")) = buffer2_uav_;
-				*(effect_->ParameterByName("Input")) = buffer1_srv_;
-				re.Dispatch(*effect_, *technique_transpose_, MATRIX_WIDTH / TRANSPOSE_BLOCK_SIZE, MATRIX_HEIGHT / TRANSPOSE_BLOCK_SIZE, 1);
-
-				// Sort the transposed column data
-				re.Dispatch(*effect_, *technique_bitonic_, NUM_ELEMENTS / BITONIC_BLOCK_SIZE, 1, 1);
-
-				SetConstants(BITONIC_BLOCK_SIZE, level, MATRIX_HEIGHT, MATRIX_WIDTH);
-
-				// Transpose the data from buffer 2 back into buffer 1
-				*(effect_->ParameterByName("Data")) = buffer1_uav_;
-				*(effect_->ParameterByName("Input")) = buffer2_srv_;
-				re.Dispatch(*effect_, *technique_transpose_, MATRIX_HEIGHT / TRANSPOSE_BLOCK_SIZE, MATRIX_WIDTH / TRANSPOSE_BLOCK_SIZE, 1);
-
-				// Sort the row data
-				re.Dispatch(*effect_, *technique_bitonic_, NUM_ELEMENTS / BITONIC_BLOCK_SIZE, 1, 1);
-			}
-
-			buffer1_->CopyToBuffer(*result_cpu_buffer_);
-			GraphicsBuffer::Mapper Mapper(*result_cpu_buffer_, BA_Read_Only);
-			uint32_t const* pBuffer = reinterpret_cast<uint32_t const*>(Mapper.Pointer<uint32_t>());
-
-			std::sort(data.begin(), data.end());
-			bool bComparisonSucceeded = true;
-			for (uint32_t i = 0; i < NUM_ELEMENTS; ++i)
-			{
-				if (data[i] != pBuffer[i])
-					bComparisonSucceeded = false;
-			}
-			printf("Comparison %s\n", (bComparisonSucceeded) ? "Succeeded" : "FAILED");
 		}
 
 	private:
-		RenderEffectPtr effect_;
+		int tex_width_, tex_height_;
 
-		RenderTechnique* technique_bitonic_ = nullptr;
-		RenderTechnique* technique_transpose_ = nullptr;
-
-		GraphicsBufferPtr result_cpu_buffer_;
-//		GraphicsBufferPtr debug_buf_;
-//		UnorderedAccessViewPtr debug_buf_uav_;
-
-		GraphicsBufferPtr buffer1_;
-		UnorderedAccessViewPtr buffer1_uav_;
-		ShaderResourceViewPtr buffer1_srv_;
-
-		GraphicsBufferPtr buffer2_;
-		UnorderedAccessViewPtr buffer2_uav_;
-		ShaderResourceViewPtr buffer2_srv_;
+		TexturePtr noise_vol_tex_;
 	};
+
+	class GPUParticleSystem : public Renderable
+	{
+	public:
+		GPUParticleSystem(int max_num_particles, TexturePtr const & terrain_height_map, TexturePtr const & terrain_normal_map)
+			: Renderable(L"GPUParticleSystem"),
+			max_num_particles_(max_num_particles),
+			tex_width_(256), tex_height_((max_num_particles + 255) / 256),
+			model_mat_(float4x4::Identity()),
+			rt_index_(true), accumulate_time_(0),
+			random_dis_(-500, +500)
+		{
+			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+			RenderEngine& re = rf.RenderEngineInstance();
+
+			effect_ = SyncLoadRenderEffect("GPUParticleSystem.fxml");
+			if (use_cs)
+			{
+				if (use_typed_uav)
+				{
+					update_cs_tech_ = effect_->TechniqueByName("UpdateTypedUAVCS");
+				}
+				else
+				{
+					update_cs_tech_ = effect_->TechniqueByName("UpdateCS");
+				}
+				technique_ = update_cs_tech_;
+
+				std::vector<float4> p(max_num_particles_);
+				for (size_t i = 0; i < p.size(); ++i)
+				{
+					p[i] = float4(0, 0, 0, -1);
+				}
+
+				uint32_t access_hint = EAH_GPU_Read | EAH_GPU_Write | EAH_GPU_Unordered;
+				if (!use_typed_uav)
+				{
+					access_hint |= EAH_GPU_Structured;
+				}
+
+				particle_pos_vb_[0] = rf.MakeVertexBuffer(BU_Dynamic, access_hint, max_num_particles_ * sizeof(float4), &p[0],
+					sizeof(float4));
+				particle_pos_uav_[0] = rf.MakeBufferUav(particle_pos_vb_[0], EF_ABGR32F);
+				particle_pos_vb_[1] = particle_pos_vb_[0];
+				particle_pos_uav_[1] = particle_pos_uav_[0];
+				particle_vel_vb_[0] = rf.MakeVertexBuffer(BU_Dynamic, access_hint, max_num_particles_ * sizeof(float4), nullptr,
+					sizeof(float4));
+				particle_vel_uav_[0] = rf.MakeBufferUav(particle_vel_vb_[0], EF_ABGR32F);
+				particle_vel_vb_[1] = particle_vel_vb_[0];
+				particle_vel_uav_[1] = particle_vel_uav_[0];
+
+				if (use_typed_uav)
+				{
+					*(effect_->ParameterByName("particle_pos_rw_buff")) = particle_pos_uav_[0];
+					*(effect_->ParameterByName("particle_vel_rw_buff")) = particle_vel_uav_[0];
+				}
+				else
+				{
+					*(effect_->ParameterByName("particle_pos_rw_stru_buff")) = particle_pos_uav_[0];
+					*(effect_->ParameterByName("particle_vel_rw_stru_buff")) = particle_vel_uav_[0];
+				}
+
+				for (int i = 0; i < max_num_particles_; ++i)
+				{
+					float const angel = this->RandomGen() / 0.05f * PI;
+					float const r = this->RandomGen() * 3;
+
+					p[i] = float4(r * cos(angel), 0.2f + abs(this->RandomGen()) * 3, r * sin(angel), 0);
+				}
+
+				GraphicsBufferPtr particle_init_vel_buff = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+					max_num_particles_ * sizeof(float4), &p[0], sizeof(float4));
+				*(effect_->ParameterByName("particle_init_vel_buff")) = rf.MakeBufferSrv(particle_init_vel_buff, EF_ABGR32F);
+			}
+			else if (use_so)
+			{
+				rls_[0] = rf.MakeRenderLayout();
+				rls_[0]->TopologyType(RenderLayout::TT_PointList);
+				rls_[0]->NumVertices(max_num_particles);
+
+				update_so_tech_ = effect_->TechniqueByName("UpdateSO");
+				technique_ = update_so_tech_;
+
+				std::vector<float4> p(max_num_particles_);
+				for (size_t i = 0; i < p.size(); ++i)
+				{
+					p[i] = float4(0, 0, 0, -1);
+				}
+
+				for (int i = 0; i < 2; ++i)
+				{
+					particle_rl_[i] = rf.MakeRenderLayout();
+
+					particle_pos_vb_[i] = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read | EAH_GPU_Write, max_num_particles_ * sizeof(float4),
+						&p[0], sizeof(float4));
+					particle_pos_srv_[i] = rf.MakeBufferSrv(particle_pos_vb_[i], EF_ABGR32F);
+
+					particle_vel_vb_[i] = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read | EAH_GPU_Write, max_num_particles_ * sizeof(float4),
+						nullptr, sizeof(float4));
+					particle_vel_srv_[i] = rf.MakeBufferSrv(particle_vel_vb_[i], EF_ABGR32F);
+
+					particle_rl_[i]->BindVertexStream(particle_pos_vb_[i], VertexElement(VEU_Position, 0, EF_ABGR32F));
+					particle_rl_[i]->BindVertexStream(particle_vel_vb_[i], VertexElement(VEU_TextureCoord, 0, EF_ABGR32F));
+				}
+
+				for (int i = 0; i < max_num_particles_; ++i)
+				{
+					float const angel = this->RandomGen() / 0.05f * PI;
+					float const r = this->RandomGen() * 3;
+
+					p[i] = float4(r * cos(angel), 0.2f + abs(this->RandomGen()) * 3, r * sin(angel), 0);
+				}
+
+				GraphicsBufferPtr particle_init_vel_buff = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+					max_num_particles_ * sizeof(float4), &p[0], sizeof(float4));
+				*(effect_->ParameterByName("particle_init_vel_buff")) = rf.MakeBufferSrv(particle_init_vel_buff, EF_ABGR32F);
+
+				particle_pos_buff_param_ = effect_->ParameterByName("particle_pos_buff");
+				particle_vel_buff_param_ = effect_->ParameterByName("particle_vel_buff");
+			}
+			else
+			{
+				rls_[0] = rf.MakeRenderLayout();
+				rls_[0]->TopologyType(RenderLayout::TT_TriangleStrip);
+				{
+					float3 xyzs[] =
+					{
+						float3(-1, +1, 0),
+						float3(+1, +1, 0),
+						float3(-1, -1, 0),
+						float3(+1, -1, 0)
+					};
+
+					GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+						sizeof(xyzs), &xyzs[0]);
+					rls_[0]->BindVertexStream(pos_vb, VertexElement(VEU_Position, 0, EF_BGR32F));
+
+					pos_aabb_ = MathLib::compute_aabbox(&xyzs[0], &xyzs[4]);
+				}
+				{
+					float2 texs[] =
+					{
+						float2(0, 0),
+						float2(1, 0),
+						float2(0, 1),
+						float2(1, 1)
+					};
+
+					GraphicsBufferPtr tex_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+						sizeof(texs), &texs[0]);
+					rls_[0]->BindVertexStream(tex_vb, VertexElement(VEU_TextureCoord, 0, EF_GR32F));
+
+					tc_aabb_ = AABBox(float3(0, 0, 0), float3(1, 1, 0));
+				}
+
+				if (use_mrt)
+				{
+					update_mrt_tech_ = effect_->TechniqueByName("Update");
+					technique_ = update_mrt_tech_;
+				}
+				else
+				{
+					update_pos_tech_ = effect_->TechniqueByName("UpdatePos");
+					update_vel_tech_ = effect_->TechniqueByName("UpdateVel");
+					technique_ = update_pos_tech_;
+				}
+
+				{
+					RenderDeviceCaps const & caps = re.DeviceCaps();
+					auto const fmt = caps.BestMatchTextureRenderTargetFormat({ EF_ABGR32F, EF_ABGR16F }, 1, 0);
+					BOOST_ASSERT(fmt != EF_Unknown);
+
+					std::vector<uint8_t> pos;
+					ElementInitData pos_init;
+					if (fmt == EF_ABGR32F)
+					{
+						pos.resize(tex_width_ * tex_height_ * sizeof(float) * 4);
+						float* p = reinterpret_cast<float*>(&pos[0]);
+						for (int i = 0; i < tex_width_ * tex_height_; ++i)
+						{
+							p[i * 4 + 0] = 0.0f;
+							p[i * 4 + 1] = 0.0f;
+							p[i * 4 + 2] = 0.0f;
+							p[i * 4 + 3] = -1.0f;
+						}
+
+						pos_init.data = &p[0];
+						pos_init.row_pitch = tex_width_ * sizeof(float) * 4;
+						pos_init.slice_pitch = 0;
+					}
+					else
+					{
+						pos.resize(tex_width_ * tex_height_ * sizeof(half) * 4);
+						half* p = reinterpret_cast<half*>(&pos[0]);
+						for (int i = 0; i < tex_width_ * tex_height_; ++i)
+						{
+							p[i * 4 + 0] = half(0.0f);
+							p[i * 4 + 1] = half(0.0f);
+							p[i * 4 + 2] = half(0.0f);
+							p[i * 4 + 3] = half(-1.0f);
+						}
+
+						pos_init.data = &p[0];
+						pos_init.row_pitch = tex_width_ * sizeof(half) * 4;
+						pos_init.slice_pitch = 0;
+					}
+					particle_pos_texture_[0] = rf.MakeTexture2D(tex_width_, tex_height_, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write, pos_init);
+					particle_pos_texture_[1] = rf.MakeTexture2D(tex_width_, tex_height_, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write, pos_init);
+					particle_vel_texture_[0] = rf.MakeTexture2D(tex_width_, tex_height_, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write);
+					particle_vel_texture_[1] = rf.MakeTexture2D(tex_width_, tex_height_, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write);
+				}
+
+				FrameBufferPtr const & screen_buffer = re.CurFrameBuffer();
+				if (use_mrt)
+				{
+					pos_vel_rt_buffer_[0] = rf.MakeFrameBuffer();
+					pos_vel_rt_buffer_[0]->Attach(FrameBuffer::Attachment::Color0, rf.Make2DRtv(particle_pos_texture_[0], 0, 1, 0));
+					pos_vel_rt_buffer_[0]->Attach(FrameBuffer::Attachment::Color1, rf.Make2DRtv(particle_vel_texture_[0], 0, 1, 0));
+
+					pos_vel_rt_buffer_[1] = rf.MakeFrameBuffer();
+					pos_vel_rt_buffer_[1]->Attach(FrameBuffer::Attachment::Color0, rf.Make2DRtv(particle_pos_texture_[1], 0, 1, 0));
+					pos_vel_rt_buffer_[1]->Attach(FrameBuffer::Attachment::Color1, rf.Make2DRtv(particle_vel_texture_[1], 0, 1, 0));
+
+					pos_vel_rt_buffer_[0]->GetViewport()->camera = pos_vel_rt_buffer_[1]->GetViewport()->camera
+						= screen_buffer->GetViewport()->camera;
+				}
+				else
+				{
+					pos_rt_buffer_[0] = rf.MakeFrameBuffer();
+					pos_rt_buffer_[0]->Attach(FrameBuffer::Attachment::Color0, rf.Make2DRtv(particle_pos_texture_[0], 0, 1, 0));
+
+					vel_rt_buffer_[0] = rf.MakeFrameBuffer();
+					vel_rt_buffer_[0]->Attach(FrameBuffer::Attachment::Color0, rf.Make2DRtv(particle_vel_texture_[0], 0, 1, 0));
+
+					pos_rt_buffer_[1] = rf.MakeFrameBuffer();
+					pos_rt_buffer_[1]->Attach(FrameBuffer::Attachment::Color0, rf.Make2DRtv(particle_pos_texture_[1], 0, 1, 0));
+
+					vel_rt_buffer_[1] = rf.MakeFrameBuffer();
+					vel_rt_buffer_[1]->Attach(FrameBuffer::Attachment::Color0, rf.Make2DRtv(particle_vel_texture_[1], 0, 1, 0));
+
+					pos_rt_buffer_[0]->GetViewport()->camera = pos_rt_buffer_[1]->GetViewport()->camera
+						= vel_rt_buffer_[0]->GetViewport()->camera = vel_rt_buffer_[1]->GetViewport()->camera
+						= screen_buffer->GetViewport()->camera;
+				}
+
+				{
+					std::vector<half> p(tex_width_ * tex_height_ * 4);
+					for (size_t i = 0; i < p.size(); i += 4)
+					{
+						float const angel = this->RandomGen() / 0.05f * PI;
+						float const r = this->RandomGen() * 3;
+
+						p[i + 0] = half(r * cos(angel));
+						p[i + 1] = half(0.2f + abs(this->RandomGen()) * 3);
+						p[i + 2] = half(r * sin(angel));
+						p[i + 3] = half(0.0f);
+					}
+					ElementInitData vel_init;
+					vel_init.data = &p[0];
+					vel_init.row_pitch = tex_width_ * sizeof(half) * 4;
+					vel_init.slice_pitch = 0;
+
+					TexturePtr particle_init_vel = rf.MakeTexture2D(tex_width_, tex_height_, 1, 1, EF_ABGR16F, 1, 0, EAH_GPU_Read | EAH_Immutable, vel_init);
+					*(effect_->ParameterByName("particle_init_vel_tex")) = particle_init_vel;
+				}
+
+				particle_pos_tex_param_ = effect_->ParameterByName("particle_pos_tex");
+				particle_vel_tex_param_ = effect_->ParameterByName("particle_vel_tex");
+			}
+
+			accumulate_time_param_ = effect_->ParameterByName("accumulate_time");
+			elapse_time_param_ = effect_->ParameterByName("elapse_time");
+
+			*(effect_->ParameterByName("init_pos_life")) = float4(0, 0, 0, 8);
+			*(effect_->ParameterByName("height_map_tex")) = terrain_height_map;
+			*(effect_->ParameterByName("normal_map_tex")) = terrain_normal_map;
+		}
+
+		void ModelMatrix(float4x4 const & model)
+		{
+			model_mat_ = model;
+			*(effect_->ParameterByName("ps_model_mat")) = model;
+		}
+
+		float4x4 const & ModelMatrix() const
+		{
+			return model_mat_;
+		}
+
+		void AutoEmit(float freq)
+		{
+			inv_emit_freq_ = 1.0f / freq;
+
+			float time = 0;
+
+			std::vector<half> time_v(tex_width_ * tex_height_);
+			for (size_t i = 0; i < time_v.size(); ++i)
+			{
+				time_v[i] = half(time);
+				time += inv_emit_freq_;
+			}
+
+			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+			if (use_so || use_cs)
+			{
+				GraphicsBufferPtr particle_birth_time_buff = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+					max_num_particles_ * sizeof(half), &time_v[0], sizeof(half));
+				*(effect_->ParameterByName("particle_birth_time_buff")) = rf.MakeBufferSrv(particle_birth_time_buff, EF_R16F);
+			}
+			else
+			{
+				ElementInitData init_data;
+				init_data.data = &time_v[0];
+				init_data.row_pitch = tex_width_ * sizeof(half);
+				init_data.slice_pitch = init_data.row_pitch * tex_height_;
+
+				TexturePtr particle_birth_time_tex = rf.MakeTexture2D(tex_width_, tex_height_, 1, 1, EF_R16F, 1, 0, EAH_GPU_Read | EAH_Immutable, init_data);
+				*(effect_->ParameterByName("particle_birth_time_tex")) = particle_birth_time_tex;
+			}
+		}
+
+		void Update(float /*app_time*/, float elapsed_time)
+		{
+			RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
+
+			accumulate_time_ += elapsed_time;
+			if (accumulate_time_ >= max_num_particles_ * inv_emit_freq_)
+			{
+				accumulate_time_ = 0;
+			}
+
+			*elapse_time_param_ = elapsed_time;
+			*accumulate_time_param_ = accumulate_time_;
+
+			if (use_cs)
+			{
+				technique_ = update_cs_tech_;
+			}
+			else if (use_so)
+			{
+				re.BindSOBuffers(particle_rl_[rt_index_]);
+				*particle_pos_buff_param_ = this->PosSrv();
+				*particle_vel_buff_param_ = this->VelSrv();
+
+				technique_ = update_so_tech_;
+			}
+			else
+			{
+				if (use_mrt)
+				{
+					technique_ = update_mrt_tech_;
+					re.BindFrameBuffer(pos_vel_rt_buffer_[rt_index_]);
+				}
+				else
+				{
+					technique_ = update_pos_tech_;
+					re.BindFrameBuffer(pos_rt_buffer_[rt_index_]);
+				}
+
+				*particle_pos_tex_param_ = this->PosTexture();
+				*particle_vel_tex_param_ = this->VelTexture();
+			}
+
+			if (use_cs)
+			{
+				re.BindFrameBuffer(re.DefaultFrameBuffer());
+				re.DefaultFrameBuffer()->Discard(FrameBuffer::CBM_Color);
+
+				this->OnRenderBegin();
+				re.Dispatch(*effect_, *technique_, (max_num_particles_ + 255) / 256, 1, 1);
+				this->OnRenderEnd();
+			}
+			else
+			{
+				this->Render();
+			}
+
+			if (!use_so && !use_mrt)
+			{
+				technique_ = update_vel_tech_;
+				re.BindFrameBuffer(vel_rt_buffer_[rt_index_]);
+
+				this->Render();
+			}
+
+			if (use_so)
+			{
+				re.BindSOBuffers(RenderLayoutPtr());
+			}
+
+			rt_index_ = !rt_index_;
+		}
+
+		TexturePtr PosTexture() const
+		{
+			return particle_pos_texture_[!rt_index_];
+		}
+
+		TexturePtr VelTexture() const
+		{
+			return particle_vel_texture_[!rt_index_];
+		}
+
+		GraphicsBufferPtr PosVB() const
+		{
+			return particle_pos_vb_[!rt_index_];
+		}
+
+		ShaderResourceViewPtr PosSrv() const
+		{
+			return particle_pos_srv_[!rt_index_];
+		}
+
+		GraphicsBufferPtr VelVB() const
+		{
+			return particle_vel_vb_[!rt_index_];
+		}
+
+		ShaderResourceViewPtr VelSrv() const
+		{
+			return particle_vel_srv_[!rt_index_];
+		}
+
+	private:
+		float RandomGen()
+		{
+			return MathLib::clamp(random_dis_(gen_) * 0.0001f, -0.05f, +0.05f);
+		}
+
+	private:
+		int max_num_particles_;
+		int tex_width_, tex_height_;
+
+		float4x4 model_mat_;
+
+		TexturePtr particle_pos_texture_[2];
+		TexturePtr particle_vel_texture_[2];
+
+		GraphicsBufferPtr particle_pos_vb_[2];
+		UnorderedAccessViewPtr particle_pos_uav_[2];
+		ShaderResourceViewPtr particle_pos_srv_[2];
+		GraphicsBufferPtr particle_vel_vb_[2];
+		UnorderedAccessViewPtr particle_vel_uav_[2];
+		ShaderResourceViewPtr particle_vel_srv_[2];
+		RenderLayoutPtr particle_rl_[2];
+
+		FrameBufferPtr pos_vel_rt_buffer_[2];
+		FrameBufferPtr pos_rt_buffer_[2];
+		FrameBufferPtr vel_rt_buffer_[2];
+
+		bool rt_index_;
+
+		float accumulate_time_;
+		float inv_emit_freq_;
+
+		ranlux24_base gen_;
+		uniform_int_distribution<> random_dis_;
+
+		RenderTechnique* update_so_tech_;
+		RenderTechnique* update_mrt_tech_;
+		RenderTechnique* update_pos_tech_;
+		RenderTechnique* update_vel_tech_;
+		RenderTechnique* update_cs_tech_;
+		RenderEffectParameter* particle_pos_tex_param_;
+		RenderEffectParameter* particle_vel_tex_param_;
+		RenderEffectParameter* particle_pos_buff_param_;
+		RenderEffectParameter* particle_vel_buff_param_;
+		RenderEffectParameter* accumulate_time_param_;
+		RenderEffectParameter* elapse_time_param_;
+	};
+
+	class TerrainRenderable : public RenderablePlane
+	{
+	public:
+		explicit TerrainRenderable(TexturePtr const & height_map, TexturePtr const & normal_map)
+			: RenderablePlane(4, 4, 64, 64, true, false)
+		{
+			effect_ = SyncLoadRenderEffect("Terrain.fxml");
+			technique_ = effect_->TechniqueByName("Terrain");
+			*(effect_->ParameterByName("grass_tex")) = ASyncLoadTexture("grass.dds", EAH_GPU_Read | EAH_Immutable);
+			*(effect_->ParameterByName("height_map_tex")) = height_map;
+			*(effect_->ParameterByName("normal_map_tex")) = normal_map;
+		}
+
+		void OnRenderBegin()
+		{
+			App3DFramework const & app = Context::Instance().AppInstance();
+			Camera const & camera = app.ActiveCamera();
+
+			*(effect_->ParameterByName("mvp")) = camera.ViewProjMatrix();
+			*(effect_->ParameterByName("inv_far")) = 1 / camera.FarPlane();
+
+			*(effect_->ParameterByName("pos_center")) = pos_aabb_.Center();
+			*(effect_->ParameterByName("pos_extent")) = pos_aabb_.HalfSize();
+		}
+	};
+
+	std::shared_ptr<GPUParticleSystem> gpu_ps;
+
 
 	enum
 	{
 		Exit
 	};
 
-	InputActionDefine actions[] = {InputActionDefine(Exit, KS_Escape)};
-} // namespace
+	InputActionDefine actions[] =
+	{
+		InputActionDefine(Exit, KS_Escape)
+	};
+}
 
 
 int SampleMain()
 {
-	BitonicSortApp app;
+	DisIntegrateMeshApp app;
 	app.Create();
 	app.Run();
+
+	gpu_ps.reset();
 
 	return 0;
 }
 
-BitonicSortApp::BitonicSortApp() : App3DFramework("Bitonic Sort")
+DisIntegrateMeshApp::DisIntegrateMeshApp()
+	: App3DFramework("DisIntegrateMesh System")
 {
-	ResLoader::Instance().AddPath("../../Tutorials/media/BitonicSort");
+	ResLoader::Instance().AddPath("../../Tutorials/media/DisIntegrateMesh");
 }
 
-void BitonicSortApp::OnCreate()
+void DisIntegrateMeshApp::OnCreate()
 {
+	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+	RenderEngine& re = rf.RenderEngineInstance();
+	RenderDeviceCaps const & caps = re.DeviceCaps();
+
+	use_gs = caps.gs_support;
+	use_cs = caps.cs_support && (caps.max_shader_model >= ShaderModel(5, 0));
+	if (use_cs)
+	{
+#ifdef KLAYGE_PLATFORM_WINDOWS_STORE
+		// Shaders are compiled to d3d11_0 for Windows store apps. No typed UAV support.
+		use_typed_uav = false;
+#else
+		use_typed_uav = caps.UavFormatSupport(EF_ABGR16F);
+#endif
+	}
+	else
+	{
+		use_so = caps.stream_output_support && caps.load_from_buffer_support;
+	}
+	use_mrt = caps.max_simultaneous_rts > 1;
+
 	font_ = SyncLoadFont("gkai00mp.kfont");
+
+	TexturePtr terrain_height_tex = SyncLoadTexture("terrain_height.dds", EAH_GPU_Read | EAH_Immutable);
+	TexturePtr terrain_normal_tex = SyncLoadTexture("terrain_normal.dds", EAH_GPU_Read | EAH_Immutable);
 
 	this->LookAt(float3(-1.2f, 2.2f, -1.2f), float3(0, 0.5f, 0));
 	this->Proj(0.01f, 100);
@@ -201,23 +814,66 @@ void BitonicSortApp::OnCreate()
 	actionMap.AddActions(actions, actions + std::size(actions));
 
 	action_handler_t input_handler = MakeSharedPtr<input_signal>();
-	input_handler->Connect([this](InputEngine const& sender, InputAction const& action) { this->InputHandler(sender, action); });
+	input_handler->Connect(
+		[this](InputEngine const & sender, InputAction const & action)
+	{
+		this->InputHandler(sender, action);
+	});
 	inputEngine.ActionMap(actionMap, input_handler);
 
-	bitonic_ = MakeSharedPtr<BitonicSortObject>();
-	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(bitonic_);
+	particles_renderable_ = MakeSharedPtr<RenderParticles>(NUM_PARTICLE);
+	particles_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableComponent>(particles_renderable_), SceneNode::SOA_Moveable);
+	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(particles_);
 
-	UIManager::Instance().Load(ResLoader::Instance().Open("BitonicSort.uiml"));
+	gpu_ps = MakeSharedPtr<GPUParticleSystem>(NUM_PARTICLE, terrain_height_tex, terrain_normal_tex);
+	gpu_ps->AutoEmit(256);
+
+	terrain_ = MakeSharedPtr<SceneNode>(
+		MakeSharedPtr<RenderableComponent>(MakeSharedPtr<TerrainRenderable>(terrain_height_tex, terrain_normal_tex)),
+		SceneNode::SOA_Cullable);
+	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(terrain_);
+
+	FrameBufferPtr const & screen_buffer = re.CurFrameBuffer();
+
+	scene_buffer_ = rf.MakeFrameBuffer();
+	scene_buffer_->GetViewport()->camera = screen_buffer->GetViewport()->camera;
+	fog_buffer_ = rf.MakeFrameBuffer();
+	fog_buffer_->GetViewport()->camera = screen_buffer->GetViewport()->camera;
+
+	blend_pp_ = SyncLoadPostProcess("Blend.ppml", "blend");
+
+	if (use_cs)
+	{
+		checked_pointer_cast<RenderParticles>(particles_renderable_)->PosVB(gpu_ps->PosVB());
+	}
+
+	UIManager::Instance().Load(ResLoader::Instance().Open("GPUParticleSystem.uiml"));
 }
 
-void BitonicSortApp::OnResize(uint32_t width, uint32_t height)
+void DisIntegrateMeshApp::OnResize(uint32_t width, uint32_t height)
 {
 	App3DFramework::OnResize(width, height);
+
+	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+
+	auto ds_view = rf.Make2DDsv(width, height, EF_D16, 1, 0);
+
+	scene_tex_ = rf.MakeTexture2D(width, height, 1, 1, EF_ABGR16F, 1, 0, EAH_GPU_Read | EAH_GPU_Write);
+	scene_buffer_->Attach(FrameBuffer::Attachment::Color0, rf.Make2DRtv(scene_tex_, 0, 1, 0));
+	scene_buffer_->Attach(ds_view);
+
+	fog_tex_ = rf.MakeTexture2D(width, height, 1, 1, EF_ABGR16F, 1, 0, EAH_GPU_Read | EAH_GPU_Write);
+	fog_buffer_->Attach(FrameBuffer::Attachment::Color0, rf.Make2DRtv(fog_tex_, 0, 1, 0));
+	fog_buffer_->Attach(ds_view);
+
+	checked_pointer_cast<RenderParticles>(particles_renderable_)->SceneTexture(scene_tex_);
+
+	blend_pp_->InputPin(0, scene_tex_);
 
 	UIManager::Instance().SettleCtrls();
 }
 
-void BitonicSortApp::InputHandler(InputEngine const& /*sender*/, InputAction const& action)
+void DisIntegrateMeshApp::InputHandler(InputEngine const & /*sender*/, InputAction const & action)
 {
 	switch (action.first)
 	{
@@ -227,7 +883,7 @@ void BitonicSortApp::InputHandler(InputEngine const& /*sender*/, InputAction con
 	}
 }
 
-void BitonicSortApp::DoUpdateOverlay()
+void DisIntegrateMeshApp::DoUpdateOverlay()
 {
 	UIManager::Instance().Render();
 
@@ -235,7 +891,7 @@ void BitonicSortApp::DoUpdateOverlay()
 	stream.precision(2);
 	stream << std::fixed << this->FPS() << " FPS";
 
-	font_->RenderText(0, 0, Color(1, 1, 0, 1), L"Bitonic Sort", 16);
+	font_->RenderText(0, 0, Color(1, 1, 0, 1), L"GPU Particle System", 16);
 	font_->RenderText(0, 18, Color(1, 1, 0, 1), stream.str().c_str(), 16);
 
 	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
@@ -243,20 +899,68 @@ void BitonicSortApp::DoUpdateOverlay()
 	font_->RenderText(0, 36, Color(1, 1, 0, 1), re.ScreenFrameBuffer()->Description(), 16);
 }
 
-uint32_t BitonicSortApp::DoUpdate(uint32_t /*pass*/)
+uint32_t DisIntegrateMeshApp::DoUpdate(uint32_t pass)
 {
-	KlayGE::RenderEngine& re = KlayGE::Context::Instance().RenderFactoryInstance().RenderEngineInstance();
+	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+	RenderEngine& re = rf.RenderEngineInstance();
 
-	KlayGE::Color clear_clr(0.2f, 0.4f, 0.6f, 1);
-	if (KlayGE::Context::Instance().Config().graphics_cfg.gamma)
+	switch (pass)
 	{
-		clear_clr.r() = 0.029f;
-		clear_clr.g() = 0.133f;
-		clear_clr.b() = 0.325f;
+	case 0:
+	{
+		re.BindFrameBuffer(scene_buffer_);
+		Color clear_clr(0.2f, 0.4f, 0.6f, 1);
+		if (Context::Instance().Config().graphics_cfg.gamma)
+		{
+			clear_clr.r() = 0.029f;
+			clear_clr.g() = 0.133f;
+			clear_clr.b() = 0.325f;
+		}
+		re.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, clear_clr, 1.0f, 0);
+
+		terrain_->Visible(true);
+		particles_->Visible(false);
+	}
+	return App3DFramework::URV_NeedFlush;
+
+	case 1:
+	{
+		terrain_->Visible(false);
+		particles_->Visible(true);
+
+		float4x4 mat = MathLib::translation(0.0f, 0.7f, 0.0f);
+		gpu_ps->ModelMatrix(mat);
+
+		gpu_ps->Update(this->AppTime(), this->FrameTime());
+
+		if (use_so)
+		{
+			checked_pointer_cast<RenderParticles>(particles_renderable_)->PosVB(gpu_ps->PosVB());
+		}
+		else
+		{
+			checked_pointer_cast<RenderParticles>(particles_renderable_)->PosTexture(gpu_ps->PosTexture());
+		}
+
+		re.BindFrameBuffer(fog_buffer_);
+		re.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, Color(0, 0, 0, 0), 1.0f, 0);
+
+		return App3DFramework::URV_NeedFlush;
 	}
 
-	checked_pointer_cast<BitonicSortObject>(bitonic_)->Update(this->AppTime(), this->FrameTime());
+	default:
+	{
+		terrain_->Visible(false);
+		particles_->Visible(false);
 
-	re.CurFrameBuffer()->Clear(KlayGE::FrameBuffer::CBM_Color | KlayGE::FrameBuffer::CBM_Depth, clear_clr, 1.0f, 0);
-	return KlayGE::App3DFramework::URV_NeedFlush | KlayGE::App3DFramework::URV_Finished;
+		blend_pp_->InputPin(1, fog_tex_);
+
+		re.BindFrameBuffer(FrameBufferPtr());
+		re.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, Color(0, 0, 0, 1), 1.0f, 0);
+
+		blend_pp_->Apply();
+
+		return App3DFramework::URV_NeedFlush | App3DFramework::URV_Finished;
+	}
+	}
 }

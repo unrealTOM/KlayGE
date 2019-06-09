@@ -1,3 +1,8 @@
+DOWNLOAD_DEPENDENCY("KlayGE/Tutorials/media/DisIntegrateMesh/grass.dds" "99497d6d0617e14eecd8c25e16e2f31eb9011195")
+DOWNLOAD_DEPENDENCY("KlayGE/Tutorials/media/DisIntegrateMesh/particle.dds" "80a47e13017dfd960f65b153313629c34d3ab0a3")
+DOWNLOAD_DEPENDENCY("KlayGE/Tutorials/media/DisIntegrateMesh/terrain_height.dds" "a9501482cf9671d67fb8341f48af5ac415fdf7e6")
+DOWNLOAD_DEPENDENCY("KlayGE/Tutorials/media/DisIntegrateMesh/terrain_normal.dds" "c677f9f2e75f474d47c0c70da892aea604cda620")
+
 SET(SOURCE_FILES
 	${KLAYGE_PROJECT_DIR}/Tutorials/src/DisIntegrateMesh/DisIntegrateMesh.cpp
 )
@@ -8,6 +13,11 @@ SET(HEADER_FILES
 
 SET(EFFECT_FILES
 	${KLAYGE_PROJECT_DIR}/Tutorials/media/DisIntegrateMesh/DisIntegrateMesh.fxml
+	${KLAYGE_PROJECT_DIR}/Tutorials/media/DisIntegrateMesh/Terrain.fxml
+)
+
+SET(POST_PROCESSORS
+	${KLAYGE_PROJECT_DIR}/Tutorials/media/DisIntegrateMesh/Blend.ppml
 )
 
 SET(UI_FILES
@@ -38,7 +48,12 @@ SET(CONTENT_FILES
 	${KLAYGE_PROJECT_DIR}/media/Textures/2D/SMAASearchTex.dds
 	${KLAYGE_PROJECT_DIR}/media/Textures/2D/ui.dds
 	${KLAYGE_PROJECT_DIR}/media/Textures/3D/color_grading.dds
-	${KLAYGE_PROJECT_DIR}/Tutorials/media/SimpleBezier/SimpleBezier.kfx
+	${KLAYGE_PROJECT_DIR}/Tutorials/media/DisIntegrateMesh/GPUParticleSystem.kfx
+	${KLAYGE_PROJECT_DIR}/Tutorials/media/DisIntegrateMesh/grass.dds
+	${KLAYGE_PROJECT_DIR}/Tutorials/media/DisIntegrateMesh/particle.dds
+	${KLAYGE_PROJECT_DIR}/Tutorials/media/DisIntegrateMesh/Terrain.kfx
+	${KLAYGE_PROJECT_DIR}/Tutorials/media/DisIntegrateMesh/terrain_height.dds
+	${KLAYGE_PROJECT_DIR}/Tutorials/media/DisIntegrateMesh/terrain_normal.dds
 )
 
 IF(KLAYGE_PLATFORM_WINDOWS_STORE)

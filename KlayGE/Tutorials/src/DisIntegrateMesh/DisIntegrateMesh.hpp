@@ -1,14 +1,15 @@
-#ifndef _BITONIC_SORT_HPP
-#define _BITONIC_SORT_HPP
+#ifndef _DIS_INTEGRATE_MESH_HPP
+#define _DIS_INTEGRATE_MESH_HPP
 
 #include <KlayGE/App3D.hpp>
 #include <KlayGE/Font.hpp>
 #include <KlayGE/CameraController.hpp>
+#include <KlayGE/PostProcess.hpp>
 
-class BitonicSortApp : public KlayGE::App3DFramework
+class DisIntegrateMeshApp : public KlayGE::App3DFramework
 {
 public:
-	BitonicSortApp();
+	DisIntegrateMeshApp();
 
 private:
 	void OnCreate();
@@ -17,15 +18,23 @@ private:
 	void DoUpdateOverlay();
 	KlayGE::uint32_t DoUpdate(KlayGE::uint32_t pass);
 
-	void InputHandler(KlayGE::InputEngine const& sender, KlayGE::InputAction const& action);
+	void InputHandler(KlayGE::InputEngine const & sender, KlayGE::InputAction const & action);
 
 	KlayGE::FontPtr font_;
-	KlayGE::SceneNodePtr bitonic_;
+
+	KlayGE::SceneNodePtr particles_;
+	KlayGE::RenderablePtr particles_renderable_;
+	KlayGE::SceneNodePtr terrain_;
 
 	KlayGE::TrackballCameraController tb_controller_;
 
-	KlayGE::UIDialogPtr dialog_;
-	float tess_factor_;
+	KlayGE::TexturePtr scene_tex_;
+	KlayGE::FrameBufferPtr scene_buffer_;
+
+	KlayGE::TexturePtr fog_tex_;
+	KlayGE::FrameBufferPtr fog_buffer_;
+
+	KlayGE::PostProcessPtr blend_pp_;
 };
 
-#endif // _BITONIC_SORT_HPP
+#endif // _DIS_INTEGRATE_MESH_HPP
