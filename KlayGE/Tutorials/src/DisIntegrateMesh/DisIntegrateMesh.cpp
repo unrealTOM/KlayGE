@@ -151,7 +151,7 @@ namespace
 
 			rls_[0] = rf.MakeRenderLayout();
 
-			effect_ = SyncLoadRenderEffect("GPUParticleSystem.fxml");
+			effect_ = SyncLoadRenderEffect("DisIntegrateMesh.fxml");
 			*(effect_->ParameterByName("particle_tex")) = ASyncLoadTexture("particle.dds", EAH_GPU_Read | EAH_Immutable);
 			if (use_gs)
 			{
@@ -247,11 +247,11 @@ namespace
 		TexturePtr noise_vol_tex_;
 	};
 
-	class GPUParticleSystem : public Renderable
+	class DisIntegrateMesh : public Renderable
 	{
 	public:
-		GPUParticleSystem(int max_num_particles, TexturePtr const & terrain_height_map, TexturePtr const & terrain_normal_map)
-			: Renderable(L"GPUParticleSystem"),
+		DisIntegrateMesh(int max_num_particles, TexturePtr const & terrain_height_map, TexturePtr const & terrain_normal_map)
+			: Renderable(L"DisIntegrateMesh"),
 			max_num_particles_(max_num_particles),
 			tex_width_(256), tex_height_((max_num_particles + 255) / 256),
 			model_mat_(float4x4::Identity()),
@@ -261,7 +261,7 @@ namespace
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 			RenderEngine& re = rf.RenderEngineInstance();
 
-			effect_ = SyncLoadRenderEffect("GPUParticleSystem.fxml");
+			effect_ = SyncLoadRenderEffect("DisIntegrateMesh.fxml");
 			if (use_cs)
 			{
 				if (use_typed_uav)
@@ -743,7 +743,7 @@ namespace
 		}
 	};
 
-	std::shared_ptr<GPUParticleSystem> gpu_ps;
+	std::shared_ptr<DisIntegrateMesh> gpu_ps;
 
 
 	enum
@@ -825,7 +825,7 @@ void DisIntegrateMeshApp::OnCreate()
 	particles_ = MakeSharedPtr<SceneNode>(MakeSharedPtr<RenderableComponent>(particles_renderable_), SceneNode::SOA_Moveable);
 	Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(particles_);
 
-	gpu_ps = MakeSharedPtr<GPUParticleSystem>(NUM_PARTICLE, terrain_height_tex, terrain_normal_tex);
+	gpu_ps = MakeSharedPtr<DisIntegrateMesh>(NUM_PARTICLE, terrain_height_tex, terrain_normal_tex);
 	gpu_ps->AutoEmit(256);
 
 	terrain_ = MakeSharedPtr<SceneNode>(
@@ -847,7 +847,7 @@ void DisIntegrateMeshApp::OnCreate()
 		checked_pointer_cast<RenderParticles>(particles_renderable_)->PosVB(gpu_ps->PosVB());
 	}
 
-	UIManager::Instance().Load(ResLoader::Instance().Open("GPUParticleSystem.uiml"));
+	UIManager::Instance().Load(ResLoader::Instance().Open("DisIntegrateMesh.uiml"));
 }
 
 void DisIntegrateMeshApp::OnResize(uint32_t width, uint32_t height)
@@ -891,7 +891,7 @@ void DisIntegrateMeshApp::DoUpdateOverlay()
 	stream.precision(2);
 	stream << std::fixed << this->FPS() << " FPS";
 
-	font_->RenderText(0, 0, Color(1, 1, 0, 1), L"GPU Particle System", 16);
+	font_->RenderText(0, 0, Color(1, 1, 0, 1), L"DisIntegrateMesh System", 16);
 	font_->RenderText(0, 18, Color(1, 1, 0, 1), stream.str().c_str(), 16);
 
 	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
