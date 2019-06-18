@@ -95,7 +95,8 @@ namespace
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
 			effect_ = SyncLoadRenderEffect("DisIntegrateMesh.fxml");
-			technique_ = effect_->TechniqueByName("UpdateCS");
+			technique_append_ = effect_->TechniqueByName("AppendCS");
+			technique_update_ = effect_->TechniqueByName("UpdateCS");
 
 			particles_.reserve(max_num_particles_);
 			for (int i = 0; i < max_num_particles_; ++i)
@@ -110,7 +111,11 @@ namespace
 
 			pos_cpu_buffer_ = rf.MakeVertexBuffer(BU_Dynamic, EAH_CPU_Read, particle_pos_vb_->Size(), nullptr);
 
+			particle_emit_vb_ = rf.MakeVertexBuffer(BU_Dynamic, access_hint | EAH_GPU_Structured | EAH_Counter, max_num_particles_ * sizeof(float4), nullptr, sizeof(float4));
+			particle_emit_uav_ = rf.MakeBufferUav(particle_emit_vb_, EF_ABGR32F);
+
 			*(effect_->ParameterByName("particle_pos_rw_buff")) = particle_pos_uav_;
+			*(effect_->ParameterByName("particle_emit_buff")) = particle_emit_uav_;
 
 			emit_pos_.reserve(max_num_emitter_);
 			for (int i = 0; i < max_num_emitter_; ++i)
@@ -119,8 +124,16 @@ namespace
 			}
 		}
 
-		void AutoEmit()
+		void AutoEmitWithCpuBuffer(float elapsed_time)
 		{
+			static float accumulate_time = 0;
+
+			accumulate_time += elapsed_time;
+			if (accumulate_time < 0.05f)
+				return;
+
+			accumulate_time -= 0.05f;
+
 			particle_pos_vb_->CopyToBuffer(*pos_cpu_buffer_);
 			GraphicsBuffer::Mapper Mapper(*pos_cpu_buffer_, BA_Read_Only);
 			float4 const* pBuffer = reinterpret_cast<float4 const*>(Mapper.Pointer<float4>());
@@ -145,13 +158,7 @@ namespace
 		{
 			RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
 
-			static float accumulate_time = 0;
-			accumulate_time += elapsed_time;
-			if (accumulate_time > 0.05f)
-			{
-				AutoEmit();
-				accumulate_time -= 0.05f;
-			}
+			//AutoEmitWithCpuBuffer(elapsed_time);
 
 			re.BindFrameBuffer(re.DefaultFrameBuffer());
 			re.DefaultFrameBuffer()->Discard(FrameBuffer::CBM_Color);
@@ -160,6 +167,10 @@ namespace
 			*(effect_->ParameterByName("particle_velocity")) = -0.8f;
 
 			this->OnRenderBegin();
+			technique_ = technique_append_;
+			re.Dispatch(*effect_, *technique_, (max_num_particles_ + 255) / 256, 1, 1);
+
+			technique_ = technique_update_;
 			re.Dispatch(*effect_, *technique_, (max_num_particles_ + 255) / 256, 1, 1);
 			this->OnRenderEnd();
 		}
@@ -184,9 +195,15 @@ namespace
 		int max_num_particles_;
 		int max_num_emitter_;
 
+		RenderTechnique* technique_update_ = nullptr;
+		RenderTechnique* technique_append_ = nullptr;
+
 		GraphicsBufferPtr particle_pos_vb_;
 		UnorderedAccessViewPtr particle_pos_uav_;
 		ShaderResourceViewPtr particle_pos_srv_;
+
+		GraphicsBufferPtr particle_emit_vb_;
+		UnorderedAccessViewPtr particle_emit_uav_;
 
 		GraphicsBufferPtr pos_cpu_buffer_;
 

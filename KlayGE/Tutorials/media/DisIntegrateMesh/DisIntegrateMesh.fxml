@@ -145,8 +145,24 @@ void ParticlesGS(point float4 input[1] : SV_Position, inout TriangleStream<PS_IN
 
   <parameter type="rw_buffer" elem_type="float4" name="particle_pos_rw_buff"/>
 
+  <parameter type="rw_structured_buffer" elem_type="float4" name="particle_emit_buff"/>
+
   <shader type="compute_shader" version="5">
     <![CDATA[
+[numthreads(256, 1, 1)]
+void AppendCS(uint3 dtid : SV_DispatchThreadID)
+{
+	uint id = dtid.x;
+  //particle_emit_buff[id] = float4(id * 0.1f, id * 0.1f, id * 0.1f, 5 * 1.0f);
+  
+  //if (id < 256)
+  {
+    uint x = particle_emit_buff.IncrementCounter();
+    particle_emit_buff[x] = float4(1.0f / x * 0.1f, 1.0f / x * 0.1f, 0, 5.0f);
+    //particle_emit_buff[x] = float4((x % 20) * 0.1f, (x % 20) * 0.1f, 0, id * 1.0f);
+  }
+}    
+    
 [numthreads(256, 1, 1)]
 void UpdateCS(uint3 dtid : SV_DispatchThreadID)
 {
@@ -164,13 +180,23 @@ void UpdateCS(uint3 dtid : SV_DispatchThreadID)
 	}
 	else
 	{
-		out_pos = float4(0, 0, 0, -1);
+    uint x = particle_emit_buff.DecrementCounter();
+    //out_pos = float4(1.0f / x * 0.1f, 1.0f / x * 0.1f, 0, 5 * 1.0f);
+    out_pos = particle_emit_buff[x];
+    //out_pos = particle_emit_buff[0];
+//		out_pos = float4(0, 0, 0, -1);
 	}
 
 	particle_pos_rw_buff[id] = out_pos;
 }
 		]]>
   </shader>
+
+  <technique name="AppendCS">
+    <pass name="p0">
+      <state name="compute_shader" value="AppendCS()"/>
+    </pass>
+  </technique>
 
   <technique name="UpdateCS">
     <pass name="p0">
