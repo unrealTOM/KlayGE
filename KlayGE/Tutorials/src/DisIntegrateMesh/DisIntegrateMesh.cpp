@@ -36,7 +36,7 @@ using namespace KlayGE;
 
 namespace
 {
-	int const NUM_PARTICLE = 8192;
+	int const NUM_PARTICLE = 1024 * 1024;
 	int const NUM_EMITTER = 16;
 
 	class RenderParticles : public Renderable
@@ -56,7 +56,7 @@ namespace
 
 			technique_ = effect_->TechniqueByName("ParticlesWithGSSO");
 
-			*(effect_->ParameterByName("point_radius")) = 0.05f;
+			*(effect_->ParameterByName("point_radius")) = 0.025f;
 			*(effect_->ParameterByName("init_pos_life")) = float4(0, 0, 0, 8);
 		}
 
@@ -111,7 +111,9 @@ namespace
 
 			pos_cpu_buffer_ = rf.MakeVertexBuffer(BU_Dynamic, EAH_CPU_Read, particle_pos_vb_->Size(), nullptr);
 
-			particle_emit_vb_ = rf.MakeVertexBuffer(BU_Dynamic, access_hint | EAH_GPU_Structured | EAH_Counter, max_num_particles_ * sizeof(float4), nullptr, sizeof(float4));
+			particle_emit_vb_ = rf.MakeVertexBuffer(BU_Dynamic, 
+				access_hint | EAH_GPU_Structured | EAH_Counter, 
+				max_num_particles_ * sizeof(float4), &particles_[0], sizeof(float4));
 			particle_emit_uav_ = rf.MakeBufferUav(particle_emit_vb_, EF_ABGR32F);
 
 			*(effect_->ParameterByName("particle_pos_rw_buff")) = particle_pos_uav_;
@@ -164,15 +166,17 @@ namespace
 			re.DefaultFrameBuffer()->Discard(FrameBuffer::CBM_Color);
 
 			*(effect_->ParameterByName("elapse_time")) = elapsed_time;
-			*(effect_->ParameterByName("particle_velocity")) = -0.8f;
+			*(effect_->ParameterByName("particle_velocity")) = -2.0f;
 
 			this->OnRenderBegin();
 			technique_ = technique_append_;
-			re.Dispatch(*effect_, *technique_, (max_num_particles_ + 255) / 256, 1, 1);
+			re.Dispatch(*effect_, *technique_, 1, 1, 1);
 
 			technique_ = technique_update_;
 			re.Dispatch(*effect_, *technique_, (max_num_particles_ + 255) / 256, 1, 1);
 			this->OnRenderEnd();
+
+			particle_emit_vb_->UpdateSubresource(0, max_num_particles_ * sizeof(float4), &particles_[0]);
 		}
 
 		GraphicsBufferPtr PosVB() const
