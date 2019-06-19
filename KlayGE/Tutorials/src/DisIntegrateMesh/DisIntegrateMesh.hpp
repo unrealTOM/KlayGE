@@ -15,12 +15,17 @@ private:
 	void OnCreate();
 	void OnResize(KlayGE::uint32_t width, KlayGE::uint32_t height);
 
+	void CreateCube();
+
 	void DoUpdateOverlay();
 	KlayGE::uint32_t DoUpdate(KlayGE::uint32_t pass);
 
 	void InputHandler(KlayGE::InputEngine const & sender, KlayGE::InputAction const & action);
 
 	KlayGE::FontPtr font_;
+
+	KlayGE::SceneNodePtr renderableMesh_;
+	std::vector<KlayGE::StaticMeshPtr> meshes;
 
 	KlayGE::SceneNodePtr particles_;
 	KlayGE::RenderablePtr particles_renderable_;

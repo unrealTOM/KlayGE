@@ -106,10 +106,9 @@ namespace
 
 			uint32_t access_hint = EAH_GPU_Read | EAH_GPU_Write | EAH_GPU_Unordered;
 
-			particle_pos_vb_ = rf.MakeVertexBuffer(BU_Dynamic, access_hint, max_num_particles_ * sizeof(float4), &particles_[0], sizeof(float4));
+			particle_pos_vb_ = rf.MakeVertexBuffer(BU_Dynamic, 
+				access_hint, max_num_particles_ * sizeof(float4), &particles_[0], sizeof(float4));
 			particle_pos_uav_ = rf.MakeBufferUav(particle_pos_vb_, EF_ABGR32F);
-
-			pos_cpu_buffer_ = rf.MakeVertexBuffer(BU_Dynamic, EAH_CPU_Read, particle_pos_vb_->Size(), nullptr);
 
 			particle_emit_vb_ = rf.MakeVertexBuffer(BU_Dynamic, 
 				access_hint | EAH_GPU_Structured | EAH_Counter, 
@@ -118,12 +117,6 @@ namespace
 
 			*(effect_->ParameterByName("particle_pos_rw_buff")) = particle_pos_uav_;
 			*(effect_->ParameterByName("particle_emit_buff")) = particle_emit_uav_;
-
-			emit_pos_.reserve(max_num_emitter_);
-			for (int i = 0; i < max_num_emitter_; ++i)
-			{
-				emit_pos_.push_back(float4(i * 0.1f, i * 0.1f, 0, -1));
-			}
 		}
 
 		void AutoEmitWithCpuBuffer(float elapsed_time)
@@ -169,14 +162,14 @@ namespace
 			*(effect_->ParameterByName("particle_velocity")) = -2.0f;
 
 			this->OnRenderBegin();
-			technique_ = technique_append_;
-			re.Dispatch(*effect_, *technique_, 1, 1, 1);
+			//technique_ = technique_append_;
+			//re.Dispatch(*effect_, *technique_, 1, 1, 1);
 
 			technique_ = technique_update_;
 			re.Dispatch(*effect_, *technique_, (max_num_particles_ + 255) / 256, 1, 1);
 			this->OnRenderEnd();
 
-			particle_emit_vb_->UpdateSubresource(0, max_num_particles_ * sizeof(float4), &particles_[0]);
+			//particle_emit_vb_->UpdateSubresource(0, max_num_particles_ * sizeof(float4), &particles_[0]);
 		}
 
 		GraphicsBufferPtr PosVB() const
@@ -187,6 +180,11 @@ namespace
 		ShaderResourceViewPtr PosSrv() const
 		{
 			return particle_pos_srv_;
+		}
+
+		UnorderedAccessViewPtr EmitUav() const
+		{
+			return particle_emit_uav_;
 		}
 
 	private:
@@ -243,10 +241,113 @@ int SampleMain()
 	return 0;
 }
 
+class RenderPolygon : public KlayGE::StaticMesh
+{
+public:
+	explicit RenderPolygon(std::wstring_view name);
+
+	void DoBuildMeshInfo(KlayGE::RenderModel const & model) override;
+
+	void OnRenderBegin() override;
+
+	void EmitUav(UnorderedAccessViewPtr const & particle_emit_uav)
+	{
+		*(effect_->ParameterByName("particle_emit_buff")) = particle_emit_uav;
+	}
+};
+
+RenderPolygon::RenderPolygon(std::wstring_view name)
+	: KlayGE::StaticMesh(name)
+{
+	KlayGE::RenderEffectPtr effect = KlayGE::SyncLoadRenderEffect("DisIntegrateMesh.fxml");
+
+	this->Technique(effect, effect->TechniqueByName("HelperTec"));
+
+	*(effect->ParameterByName("color")) = KlayGE::float4(.0f, 1.0f, 0.0f, 1.0f);
+}
+
+void RenderPolygon::DoBuildMeshInfo(KlayGE::RenderModel const & model)
+{
+	KFL_UNUSED(model);
+
+	KlayGE::AABBox const & pos_bb = this->PosBound();
+	*(effect_->ParameterByName("pos_center")) = pos_bb.Center();
+	*(effect_->ParameterByName("pos_extent")) = pos_bb.HalfSize();
+}
+
+void RenderPolygon::OnRenderBegin()
+{
+	KlayGE::App3DFramework const & app = KlayGE::Context::Instance().AppInstance();
+
+	KlayGE::float4x4 view_proj = model_mat_ * app.ActiveCamera().ViewProjMatrix();
+	*(effect_->ParameterByName("mvp")) = view_proj;
+}
+
 DisIntegrateMeshApp::DisIntegrateMeshApp()
 	: App3DFramework("DisIntegrateMesh System")
 {
 	ResLoader::Instance().AddPath("../../Tutorials/media/DisIntegrateMesh");
+}
+
+void DisIntegrateMeshApp::CreateCube()
+{
+	std::vector<KlayGE::float3> vertices;
+	vertices.push_back(KlayGE::float3(0.5f, -0.25f, 0.25f));
+	vertices.push_back(KlayGE::float3(1.0f, -0.25f, 0.25f));
+	vertices.push_back(KlayGE::float3(1.0f, -0.25f, -0.25f));
+	vertices.push_back(KlayGE::float3(0.5f, -0.25f, -0.25f));
+	vertices.push_back(KlayGE::float3(0.5f, 0.25f, 0.25f));
+	vertices.push_back(KlayGE::float3(1.0f, 0.25f, 0.25f));
+	vertices.push_back(KlayGE::float3(1.0f, 0.25f, -0.25f));
+	vertices.push_back(KlayGE::float3(0.5f, 0.25f, -0.25f));
+
+	KlayGE::RenderModelPtr model = KlayGE::MakeSharedPtr<KlayGE::RenderModel>(L"model", KlayGE::SceneNode::SOA_Cullable);
+
+	meshes.resize(2);
+
+	std::vector<KlayGE::uint16_t> indices1;
+	indices1.push_back(0); indices1.push_back(4); indices1.push_back(1); indices1.push_back(5);
+	indices1.push_back(2); indices1.push_back(6); indices1.push_back(3); indices1.push_back(7);
+	indices1.push_back(0); indices1.push_back(4);
+
+	meshes[0] = KlayGE::MakeSharedPtr<RenderPolygon>(L"side_mesh");
+	meshes[0]->NumLods(1);
+	meshes[0]->AddVertexStream(0, &vertices[0], static_cast<KlayGE::uint32_t>(sizeof(vertices[0]) * vertices.size()),
+		KlayGE::VertexElement(KlayGE::VEU_Position, 0, KlayGE::EF_BGR32F), KlayGE::EAH_GPU_Read);
+	meshes[0]->AddIndexStream(0, &indices1[0], static_cast<KlayGE::uint32_t>(sizeof(indices1[0]) * indices1.size()),
+		KlayGE::EF_R16UI, KlayGE::EAH_GPU_Read);
+	meshes[0]->GetRenderLayout().TopologyType(KlayGE::RenderLayout::TT_TriangleStrip);
+	meshes[0]->PosBound(KlayGE::AABBox(KlayGE::float3(-1, -1, -1), KlayGE::float3(1, 1, 1)));
+
+	std::vector<KlayGE::uint16_t> indices2;
+	indices2.push_back(0); indices2.push_back(1); indices2.push_back(2);
+	indices2.push_back(0); indices2.push_back(2); indices2.push_back(3);
+	indices2.push_back(7); indices2.push_back(6); indices2.push_back(5);
+	indices2.push_back(7); indices2.push_back(5); indices2.push_back(4);
+
+	meshes[1] = KlayGE::MakeSharedPtr<RenderPolygon>(L"cap_mesh");
+	meshes[1]->NumLods(1);
+	meshes[1]->AddVertexStream(0, &vertices[0], static_cast<KlayGE::uint32_t>(sizeof(vertices[0]) * vertices.size()),
+		KlayGE::VertexElement(KlayGE::VEU_Position, 0, KlayGE::EF_BGR32F), KlayGE::EAH_GPU_Read);
+	meshes[1]->AddIndexStream(0, &indices2[0], static_cast<KlayGE::uint32_t>(sizeof(indices2[0]) * indices2.size()),
+		KlayGE::EF_R16UI, KlayGE::EAH_GPU_Read);
+	meshes[1]->GetRenderLayout().TopologyType(KlayGE::RenderLayout::TT_TriangleList);
+	meshes[1]->PosBound(KlayGE::AABBox(KlayGE::float3(-1, -1, -1), KlayGE::float3(1, 1, 1)));
+
+	for (size_t i = 0; i < meshes.size(); ++i)
+	{
+		meshes[i]->BuildMeshInfo(*model);
+	}
+	model->AssignMeshes(meshes.begin(), meshes.end());
+	model->BuildModelInfo();
+
+	renderableMesh_ = model->RootNode();
+	for (size_t i = 0; i < meshes.size(); ++i)
+	{
+		renderableMesh_->AddComponent(KlayGE::MakeSharedPtr<KlayGE::RenderableComponent>(meshes[i]));
+		checked_pointer_cast<RenderPolygon>(meshes[i])->EmitUav(gpu_ps->EmitUav());
+	}
+	KlayGE::Context::Instance().SceneManagerInstance().SceneRootNode().AddChild(renderableMesh_);
 }
 
 void DisIntegrateMeshApp::OnCreate()
@@ -290,6 +391,8 @@ void DisIntegrateMeshApp::OnCreate()
 	blend_pp_ = SyncLoadPostProcess("Blend.ppml", "blend");
 
 	checked_pointer_cast<RenderParticles>(particles_renderable_)->PosVB(gpu_ps->PosVB());
+
+	CreateCube();
 
 	UIManager::Instance().Load(ResLoader::Instance().Open("DisIntegrateMesh.uiml"));
 }
@@ -352,6 +455,9 @@ uint32_t DisIntegrateMeshApp::DoUpdate(uint32_t pass)
 	{
 	case 0:
 	{
+		renderableMesh_->Visible(true);
+		particles_->Visible(false);
+
 		re.BindFrameBuffer(scene_buffer_);
 		Color clear_clr(0.2f, 0.4f, 0.6f, 1);
 		if (Context::Instance().Config().graphics_cfg.gamma)
@@ -362,10 +468,11 @@ uint32_t DisIntegrateMeshApp::DoUpdate(uint32_t pass)
 		}
 		re.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, clear_clr, 1.0f, 0);
 	}
-	return App3DFramework::URV_NeedFlush;
+	return App3DFramework::URV_NeedFlush | App3DFramework::URV_SimpleForwardOnly;
 
 	case 1:
 	{
+		renderableMesh_->Visible(false);
 		particles_->Visible(true);
 
 		gpu_ps->Update(this->AppTime(), this->FrameTime());
@@ -378,6 +485,7 @@ uint32_t DisIntegrateMeshApp::DoUpdate(uint32_t pass)
 
 	default:
 	{
+		renderableMesh_->Visible(false);
 		particles_->Visible(false);
 
 		blend_pp_->InputPin(1, fog_tex_);

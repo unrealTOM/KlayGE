@@ -140,12 +140,43 @@ void ParticlesGS(point float4 input[1] : SV_Position, inout TriangleStream<PS_IN
     </pass>
   </technique>
 
+  <parameter type="float4" name="color"/>
+
+  <parameter type="float3" name="pos_center"/>
+  <parameter type="float3" name="pos_extent"/>
+
+  <parameter type="rw_structured_buffer" elem_type="float4" name="particle_emit_buff"/>
+
+  <shader>
+    <![CDATA[
+void HelperVS(float4 position : POSITION,
+			out float4 oPosition : SV_Position)
+{
+	position = float4(position.xyz * pos_extent + pos_center, 1);
+	oPosition = mul(position, mvp);
+}
+
+float4 HelperPS() : SV_Target0
+{
+  uint x = particle_emit_buff.IncrementCounter();
+  particle_emit_buff[x] = float4(0.5f, 0.25f, -0.25f, 2.0f);
+
+	return float4(x / 50.0f, 0, 0, 1.0f); //color;
+}
+		]]>
+  </shader>
+  
+  <technique name="HelperTec">
+    <pass name="p0">
+      <state name="vertex_shader" value="HelperVS()"/>
+      <state name="pixel_shader" value="HelperPS()"/>
+    </pass>
+  </technique>
+
   <parameter type="float" name="elapse_time"/>
   <parameter type="float" name="particle_velocity"/>
 
   <parameter type="rw_buffer" elem_type="float4" name="particle_pos_rw_buff"/>
-
-  <parameter type="rw_structured_buffer" elem_type="float4" name="particle_emit_buff"/>
 
   <shader type="compute_shader" version="5">
     <![CDATA[
