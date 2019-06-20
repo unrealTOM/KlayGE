@@ -147,7 +147,7 @@ void ParticlesGS(point float4 input[1] : SV_Position, inout TriangleStream<PS_IN
 
   <parameter type="rw_structured_buffer" elem_type="float4" name="particle_emit_buff"/>
 
-  <shader>
+  <shader type="vertex_shader">
     <![CDATA[
 void HelperVS(float4 position : POSITION,
 			out float4 oPosition : SV_Position)
@@ -155,13 +155,17 @@ void HelperVS(float4 position : POSITION,
 	position = float4(position.xyz * pos_extent + pos_center, 1);
 	oPosition = mul(position, mvp);
 }
+		]]>
+  </shader>
 
+  <shader>
+    <![CDATA[
 float4 HelperPS() : SV_Target0
 {
   uint x = particle_emit_buff.IncrementCounter();
   particle_emit_buff[x] = float4(0.5f, 0.25f, -0.25f, 2.0f);
 
-	return float4(x / 50.0f, 0, 0, 1.0f); //color;
+	return color;
 }
 		]]>
   </shader>

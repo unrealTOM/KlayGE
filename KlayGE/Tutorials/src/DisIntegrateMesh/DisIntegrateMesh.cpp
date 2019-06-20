@@ -160,6 +160,7 @@ namespace
 
 			*(effect_->ParameterByName("elapse_time")) = elapsed_time;
 			*(effect_->ParameterByName("particle_velocity")) = -2.0f;
+			*(effect_->ParameterByName("particle_emit_buff")) = particle_emit_uav_;
 
 			this->OnRenderBegin();
 			//technique_ = technique_append_;
@@ -458,6 +459,9 @@ uint32_t DisIntegrateMeshApp::DoUpdate(uint32_t pass)
 		renderableMesh_->Visible(true);
 		particles_->Visible(false);
 
+		for (size_t i = 0; i < meshes.size(); ++i)
+			checked_pointer_cast<RenderPolygon>(meshes[i])->EmitUav(gpu_ps->EmitUav());
+
 		re.BindFrameBuffer(scene_buffer_);
 		Color clear_clr(0.2f, 0.4f, 0.6f, 1);
 		if (Context::Instance().Config().graphics_cfg.gamma)
@@ -467,6 +471,8 @@ uint32_t DisIntegrateMeshApp::DoUpdate(uint32_t pass)
 			clear_clr.b() = 0.325f;
 		}
 		re.CurFrameBuffer()->Clear(FrameBuffer::CBM_Color | FrameBuffer::CBM_Depth, clear_clr, 1.0f, 0);
+
+		scene_buffer_->Attach(0, gpu_ps->EmitUav());
 	}
 	return App3DFramework::URV_NeedFlush | App3DFramework::URV_SimpleForwardOnly;
 
